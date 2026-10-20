@@ -1,8 +1,6 @@
 package com.android.system.service;
 
 import android.app.Activity;
-import android.app.ActivityManager;
-import android.app.Application;
 import android.app.Instrumentation;
 import android.content.ComponentName;
 import android.content.Context;
@@ -12,9 +10,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
-import android.content.pm.Signature;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -24,9 +20,7 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.Looper;
 import android.os.Process;
 import android.provider.Settings;
@@ -36,7 +30,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -54,7 +47,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
@@ -66,10 +58,7 @@ import dalvik.system.DexClassLoader;
 
 /**
  * =========================================================================================
- * TRISPY VIRTUAL SPACE ENGINE - ABSOLUTE DEFENSE EDITION
- * =========================================================================================
- * Fixes: Null reference used for synchronization (monitor-enter)
- * Reason: Unity requires mUiThread, mHandler, and mApplication to be perfectly initialized.
+ * TRISPY VIRTUAL SPACE ENGINE - ABSOLUTE DEFENSE EDITION (COMPILE SAFE)
  * =========================================================================================
  */
 public class StubActivity extends Activity {
@@ -90,12 +79,12 @@ public class StubActivity extends Activity {
     private ActivityInfo targetActivityInfo;
     private DexClassLoader targetClassLoader;
     private SandboxContext sandboxContext;
-    private sun.misc.Unsafe unsafeInstance;
+    
+    // UNSAFE VIA OBJECT & REFLECTION (Bypasses the compiler error)
+    private Object unsafeInstance;
     private Class<?> unsafeClass;
     
-    // UI Components (Programmatic)
-    private LinearLayout rootMainLayout;
-    private LinearLayout storeContainer;
+    // UI Components
     private TextView logTextView;
     private ScrollView logScrollView;
     private StringBuilder logStringBuilder = new StringBuilder();
@@ -107,7 +96,6 @@ public class StubActivity extends Activity {
     // State Flags
     private boolean isEngineInitialized = false;
     private boolean isActivityLaunched = false;
-    private boolean isFloatingMenuActive = false;
     private boolean isUnsafeInitialized = false;
 
     // =========================================================================================
@@ -118,25 +106,16 @@ public class StubActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // 1. Initialize the Programmatic UI Dashboard
         buildMainDashboardUI();
         log("=========================================");
-        log("INITIALIZING TRISPY ABSOLUTE DEFENSE ENGINE");
+        log("INITIALIZING TRISPY ABSOLUTE DEFENSE");
         log("=========================================");
         
-        // 2. Install Global Crash Catcher
         installGlobalCrashHandler();
-        
-        // 3. Initialize Unsafe (God-Tier Reflection Bypass)
         initUnsafe();
-        
-        // 4. Spoof Hardware
         HardwareSpoofer.spoofHardware();
-        
-        // 5. Capture Intent Data
         captureIntentData();
         
-        // 6. Start Engine Sequence in Background Thread
         new Thread(() -> {
             try {
                 executeEngineSequence();
@@ -150,7 +129,7 @@ public class StubActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         destroyFloatingPanel();
-        log("Engine Destroyed. Cleaning up VFS...");
+        log("Engine Destroyed.");
     }
 
     // =========================================================================================
@@ -159,12 +138,11 @@ public class StubActivity extends Activity {
 
     private void buildMainDashboardUI() {
         try {
-            rootMainLayout = new LinearLayout(this);
+            LinearLayout rootMainLayout = new LinearLayout(this);
             rootMainLayout.setOrientation(LinearLayout.VERTICAL);
-            rootMainLayout.setBackgroundColor(Color.parseColor("#121212")); // Dark Mode
+            rootMainLayout.setBackgroundColor(Color.parseColor("#121212"));
             rootMainLayout.setPadding(30, 30, 30, 30);
 
-            // Top Bar (Title)
             LinearLayout topBar = new LinearLayout(this);
             topBar.setOrientation(LinearLayout.HORIZONTAL);
             topBar.setGravity(Gravity.CENTER_VERTICAL);
@@ -176,16 +154,13 @@ public class StubActivity extends Activity {
             title.setTextSize(26);
             title.setTypeface(null, Typeface.BOLD);
             topBar.addView(title);
-
             rootMainLayout.addView(topBar);
 
-            // App Store Container
-            storeContainer = new LinearLayout(this);
+            LinearLayout storeContainer = new LinearLayout(this);
             storeContainer.setOrientation(LinearLayout.VERTICAL);
             storeContainer.setBackgroundColor(Color.parseColor("#1E1E1E"));
             storeContainer.setPadding(20, 20, 20, 20);
 
-            // App Store Item: Free Fire Max
             LinearLayout ffItem = new LinearLayout(this);
             ffItem.setOrientation(LinearLayout.HORIZONTAL);
             ffItem.setGravity(Gravity.CENTER_VERTICAL);
@@ -216,7 +191,6 @@ public class StubActivity extends Activity {
             ffItem.addView(playBtn);
             storeContainer.addView(ffItem);
 
-            // App Store Item: Play Store
             LinearLayout psItem = new LinearLayout(this);
             psItem.setOrientation(LinearLayout.HORIZONTAL);
             psItem.setGravity(Gravity.CENTER_VERTICAL);
@@ -239,12 +213,6 @@ public class StubActivity extends Activity {
 
             rootMainLayout.addView(storeContainer);
 
-            // Spacer
-            View spacer = new View(this);
-            spacer.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 40));
-            rootMainLayout.addView(spacer);
-
-            // Log Container
             TextView logTitle = new TextView(this);
             logTitle.setText("VM LOGS:");
             logTitle.setTextColor(Color.GRAY);
@@ -274,7 +242,7 @@ public class StubActivity extends Activity {
 
             setContentView(rootMainLayout);
         } catch (Throwable t) {
-            Log.e(TAG, "Failed to build Dashboard UI", t);
+            Log.e(TAG, "Failed to build UI", t);
         }
     }
 
@@ -284,17 +252,15 @@ public class StubActivity extends Activity {
             intent.setData(Uri.parse("market://details?id=" + targetPackageName));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
-            log("Opened Play Store for " + targetPackageName);
+            log("Opened Play Store");
         } catch (Exception e) {
-            logError("Play Store app not found. Opening browser instead.");
+            logError("Play Store not found. Opening browser.");
             try {
                 Intent intent = new Intent(Intent.ACTION_VIEW);
                 intent.setData(Uri.parse("https://play.google.com/store/apps/details?id=" + targetPackageName));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(intent);
-            } catch (Exception ex) {
-                logError("Failed to open browser: " + ex.getMessage());
-            }
+            } catch (Exception ex) {}
         }
     }
 
@@ -321,12 +287,6 @@ public class StubActivity extends Activity {
         if (t.getCause() != null) {
             logStringBuilder.append("Cause: ").append(t.getCause().toString()).append("\n");
         }
-        
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        t.printStackTrace(pw);
-        Log.e(TAG, sw.toString());
-
         updateDebuggerText();
         
         runOnUiThread(() -> {
@@ -348,17 +308,6 @@ public class StubActivity extends Activity {
     private void installGlobalCrashHandler() {
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             logFatalError("UNCAUGHT EXCEPTION", throwable);
-            try {
-                File crashFile = new File(getFilesDir(), "trispy_store_crash_log.txt");
-                FileOutputStream fos = new FileOutputStream(crashFile, true);
-                PrintWriter pw = new PrintWriter(fos);
-                pw.println("\n--- CRASH AT " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()) + " ---");
-                throwable.printStackTrace(pw);
-                pw.close();
-                fos.close();
-            } catch (IOException e) {
-                Log.e(TAG, "Failed to write crash log", e);
-            }
             try { Thread.sleep(2000); } catch (Exception e) {}
             Process.killProcess(Process.myPid());
             System.exit(1);
@@ -385,7 +334,7 @@ public class StubActivity extends Activity {
             unsafeClass = Class.forName("sun.misc.Unsafe");
             Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
             theUnsafe.setAccessible(true);
-            unsafeInstance = (sun.misc.Unsafe) theUnsafe.get(null);
+            unsafeInstance = theUnsafe.get(null);
             isUnsafeInitialized = true;
             log("Unsafe memory engine initialized.");
         } catch (Exception e) {
@@ -413,29 +362,21 @@ public class StubActivity extends Activity {
     }
 
     private void resolveApplicationInfo() throws PackageManager.NameNotFoundException {
-        log("Fetching ApplicationInfo...");
         targetAppInfo = getPackageManager().getApplicationInfo(targetPackageName, 0);
-        if (targetAppInfo == null) throw new RuntimeException("ApplicationInfo is null. App not installed?");
+        if (targetAppInfo == null) throw new RuntimeException("ApplicationInfo is null.");
         log("APK: " + targetAppInfo.sourceDir);
-        log("Native Lib Dir: " + targetAppInfo.nativeLibraryDir);
     }
 
     private void setupVirtualFileSystem() {
-        log("Setting up Virtual File System (VFS)...");
         File virtualRootDir = new File(getFilesDir(), "TrispyVM");
         File virtualDataDir = new File(virtualRootDir, "Data/" + targetPackageName);
         File virtualObbDir = new File(virtualRootDir, "Obb/" + targetPackageName);
-        
         if (!virtualRootDir.exists()) virtualRootDir.mkdirs();
         if (!virtualDataDir.exists()) virtualDataDir.mkdirs();
         if (!virtualObbDir.exists()) virtualObbDir.mkdirs();
-        
-        log("VFS Data Dir: " + virtualDataDir.getAbsolutePath());
-        log("VFS Obb Dir: " + virtualObbDir.getAbsolutePath());
     }
 
     private void extractNativeLibraries() {
-        log("Extracting Native Libraries from APK...");
         File libDir = new File(getFilesDir(), "TrispyVM/Libs/" + targetPackageName);
         if (!libDir.exists()) libDir.mkdirs();
 
@@ -443,12 +384,9 @@ public class StubActivity extends Activity {
             Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
-                String entryName = entry.getName();
-                
-                if (entryName.startsWith("lib/arm64-v8a/") && entryName.endsWith(".so")) {
-                    String fileName = entryName.substring(entryName.lastIndexOf('/') + 1);
+                if (entry.getName().startsWith("lib/arm64-v8a/") && entry.getName().endsWith(".so")) {
+                    String fileName = entry.getName().substring(entry.getName().lastIndexOf('/') + 1);
                     File outFile = new File(libDir, fileName);
-                    
                     if (!outFile.exists()) {
                         try (InputStream is = zip.getInputStream(entry);
                              FileOutputStream fos = new FileOutputStream(outFile)) {
@@ -458,19 +396,16 @@ public class StubActivity extends Activity {
                                 fos.write(buffer, 0, len);
                             }
                         }
-                        log("Extracted: " + fileName);
                     }
                 }
             }
-            log("Native Libraries Extracted Successfully.");
+            log("Native Libraries Extracted.");
         } catch (Throwable t) {
             logError("Failed to extract libs: " + t.getMessage());
         }
     }
 
     private void resolveTargetActivity() {
-        log("Resolving Target Activity...");
-
         try {
             Intent intent = getPackageManager().getLaunchIntentForPackage(targetPackageName);
             if (intent != null && intent.getComponent() != null) {
@@ -478,22 +413,7 @@ public class StubActivity extends Activity {
                 log("Resolved via Intent: " + targetActivityClassName);
                 return;
             }
-        } catch (Throwable t) { logError("Intent resolution failed."); }
-
-        try {
-            Intent queryIntent = new Intent(Intent.ACTION_MAIN);
-            queryIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-            queryIntent.setPackage(targetPackageName);
-            List<ResolveInfo> resolveInfos = getPackageManager().queryIntentActivities(queryIntent, 0);
-            if (resolveInfos != null && !resolveInfos.isEmpty()) {
-                ActivityInfo info = resolveInfos.get(0).activityInfo;
-                if (info != null && info.name != null) {
-                    targetActivityClassName = info.name;
-                    log("Resolved via Query: " + targetActivityClassName);
-                    return;
-                }
-            }
-        } catch (Throwable t) { logError("Query resolution failed."); }
+        } catch (Throwable t) {}
 
         if (targetPackageName.contains("freefire")) {
             targetActivityClassName = FALLBACK_FF_ACTIVITY;
@@ -502,20 +422,17 @@ public class StubActivity extends Activity {
         }
 
         if (targetActivityClassName == null || targetActivityClassName.isEmpty()) {
-            throw new RuntimeException("Could not resolve Activity for " + targetPackageName);
+            throw new RuntimeException("Could not resolve Activity.");
         }
     }
 
     private void setupEnvironment() throws Exception {
-        log("Setting up Sandbox Context...");
         sandboxContext = new SandboxContext(this, targetPackageName);
 
-        log("Building DexClassLoader (Split APK Support)...");
         StringBuilder dexPathBuilder = new StringBuilder(targetAppInfo.sourceDir);
-        if (targetAppInfo.splitSourceDirs != null && targetAppInfo.splitSourceDirs.length > 0) {
+        if (targetAppInfo.splitSourceDirs != null) {
             for (String split : targetAppInfo.splitSourceDirs) {
                 dexPathBuilder.append(":").append(split);
-                log("Added Split APK: " + split);
             }
         }
         
@@ -534,12 +451,12 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 5: THE REAL FIX (UNSAFE INJECTION OF CRITICAL THREADS)
+    // SECTION 5: THE REAL FIX (UNSAFE INJECTION VIA REFLECTION)
     // =========================================================================================
 
     private void launchVirtualActivity() throws Exception {
         if (isActivityLaunched) return;
-        log("Initiating ActivityThread Reflection Hook...");
+        log("Initiating Reflection Hook...");
 
         Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
         Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
@@ -550,7 +467,6 @@ public class StubActivity extends Activity {
         getInstrumentationMethod.setAccessible(true);
         Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(currentActivityThread);
 
-        log("Loading Game Class: " + targetActivityClassName);
         Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
         
         Activity targetActivity;
@@ -569,25 +485,21 @@ public class StubActivity extends Activity {
 
         if (isUnsafeInitialized) {
             try {
-                log("Injecting Unity metadata via Unsafe...");
+                log("Injecting critical threads & metadata via Unsafe...");
                 
-                // 1. Metadata
                 injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
                 injectFieldUnsafe(targetActivity, "mComponent", componentName);
                 injectFieldUnsafe(targetActivity, "mCallingActivity", componentName);
                 injectFieldUnsafe(targetActivity, "mCallingPackage", targetPackageName);
                 
-                // 2. Application and Base Context
                 injectFieldUnsafe(targetActivity, "mApplication", getApplication());
                 injectFieldUnsafe(targetActivity, "mBase", sandboxContext);
                 
-                // 3. THE FINAL FIX: Inject Threads and Handlers
-                // Unity calls synchronized(mUiThread) inside onCreate. If it's null, it crashes.
+                // FIXES MONITOR-ENTER CRASH
                 injectFieldUnsafe(targetActivity, "mUiThread", Thread.currentThread());
                 injectFieldUnsafe(targetActivity, "mMainThread", currentActivityThread);
                 injectFieldUnsafe(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
                 
-                log("Injected Application, Base Context, UiThread, and Handler via Unsafe.");
             } catch (Exception e) {
                 log("Unsafe injection partially failed: " + e.getMessage());
             }
@@ -620,18 +532,15 @@ public class StubActivity extends Activity {
             args[11] = null;
             args[12] = null;
             
-            for (int i = 13; i < paramCount; i++) {
-                args[i] = null;
-            }
+            for (int i = 13; i < paramCount; i++) args[i] = null;
 
-            log("Invoking attach()...");
             attachMethod.invoke(targetActivity, args);
         }
 
         log("Invoking onCreate()...");
         realInstrumentation.callActivityOnCreate(targetActivity, null);
 
-        log("Setting Content View (Rendering Game)...");
+        log("Setting Content View...");
         setContentView(targetActivity.getWindow().getDecorView());
         
         isActivityLaunched = true;
@@ -658,9 +567,7 @@ public class StubActivity extends Activity {
                 Method putObjectMethod = unsafeClass.getMethod("putObject", Object.class, long.class, Object.class);
                 putObjectMethod.invoke(unsafeInstance, obj, offset, value);
             }
-        } catch (Exception e) {
-            // Ignore
-        }
+        } catch (Exception e) {}
     }
 
     // =========================================================================================
@@ -669,10 +576,7 @@ public class StubActivity extends Activity {
 
     private void showFloatingPanel() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                logError("No overlay permission.");
-                return;
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) return;
 
             windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
             int type = Build.VERSION.SDK_INT >= 26
@@ -698,17 +602,12 @@ public class StubActivity extends Activity {
 
             windowManager.addView(logo, lp);
             floatingPanelView = logo;
-            log("Floating Menu Active.");
-        } catch (Throwable t) {
-            logError("Overlay failed: " + t.getMessage());
-        }
+        } catch (Throwable t) {}
     }
 
     private void destroyFloatingPanel() {
         try {
-            if (windowManager != null && floatingPanelView != null) {
-                windowManager.removeView(floatingPanelView);
-            }
+            if (windowManager != null && floatingPanelView != null) windowManager.removeView(floatingPanelView);
         } catch (Throwable t) {}
     }
 
@@ -719,7 +618,6 @@ public class StubActivity extends Activity {
                 setBuildField("BRAND", "samsung");
                 setBuildField("MANUFACTURER", "samsung");
                 setBuildField("DEVICE", "e3q");
-                setBuildField("FINGERPRINT", "samsung/e3qxeea/e3q:14/UP1A.231005.007/S928BXXU1AWLM:user/release-keys");
             } catch (Exception e) {}
         }
 
@@ -753,19 +651,13 @@ public class StubActivity extends Activity {
         }
 
         @Override
-        public String getPackageName() {
-            return targetPkg;
-        }
+        public String getPackageName() { return targetPkg; }
 
         @Override
-        public Resources getResources() {
-            return targetRes != null ? targetRes : super.getResources();
-        }
+        public Resources getResources() { return targetRes != null ? targetRes : super.getResources(); }
 
         @Override
-        public Context getApplicationContext() {
-            return getBaseContext().getApplicationContext();
-        }
+        public Context getApplicationContext() { return getBaseContext().getApplicationContext(); }
 
         @Override
         public File getObbDir() {
@@ -784,7 +676,6 @@ public class StubActivity extends Activity {
                     @Override
                     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                         String methodName = method.getName();
-                        
                         if (methodName.equals("getLaunchIntentForPackage") && args != null && args.length > 0) {
                             String pkg = (String) args[0];
                             if (pkg != null && pkg.equals(targetPkg)) {
@@ -794,7 +685,6 @@ public class StubActivity extends Activity {
                                 return intent;
                             }
                         }
-
                         if (methodName.equals("getPackageInfo") && args != null && args.length > 0) {
                             String pkg = (String) args[0];
                             if (pkg != null && pkg.contains("com.google.android.gms")) {
@@ -804,12 +694,7 @@ public class StubActivity extends Activity {
                                 return fakeGms;
                             }
                         }
-                        
-                        try {
-                            return method.invoke(basePm, args);
-                        } catch (InvocationTargetException e) {
-                            throw e.getCause();
-                        }
+                        try { return method.invoke(basePm, args); } catch (InvocationTargetException e) { throw e.getCause(); }
                     }
                 }
             );
