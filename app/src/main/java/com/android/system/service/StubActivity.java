@@ -32,34 +32,51 @@ public class StubActivity extends Activity {
 
         try {
             ApplicationInfo appInfo = getPackageManager().getApplicationInfo(targetPkg, 0);
-            String apkPath = appInfo.sourceDir;
             
-            File extractedLibs = NativeLibraryExtractor.extractLibs(this, apkPath, targetPkg);
+            // 1. Handle Split APKs
+            StringBuilder dexPathBuilder = new StringBuilder(appInfo.sourceDir);
+            if (appInfo.splitSourceDirs != null) {
+                for (String split : appInfo.splitSourceDirs) {
+                    dexPathBuilder.append(":").append(split);
+                }
+            }
+            String dexPath = dexPathBuilder.toString();
             
+            // 2. Extract Native Libs
+            File extractedLibs = NativeLibraryExtractor.extractLibs(this, appInfo.sourceDir, targetPkg);
+            
+            // 3. Setup Sandbox Context and ClassLoader
             SandboxContext sandboxContext = new SandboxContext(this, targetPkg);
             File dexOutputDir = getDir("dex_" + targetPkg, 0);
             DexClassLoader classLoader = new DexClassLoader(
-                apkPath, dexOutputDir.getAbsolutePath(), extractedLibs.getAbsolutePath(), getClassLoader()
+                dexPath, dexOutputDir.getAbsolutePath(), extractedLibs.getAbsolutePath(), getClassLoader()
             );
             
-            // --- FIX: ROBUST ACTIVITY FINDER ---
-            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(targetPkg);
+            // 4. Robust Activity Finding
             ComponentName componentName = null;
-            
-            if (launchIntent != null && launchIntent.getComponent() != null) {
-                componentName = launchIntent.getComponent();
-            } else {
-                // Fallback: Query PackageManager manually
+            try {
+                Intent launchIntent = getPackageManager().getLaunchIntentForPackage(targetPkg);
+                if (launchIntent != null && launchIntent.getComponent() != null) {
+                    componentName = launchIntent.getComponent();
+                }
+            } catch (Exception e) {}
+
+            if (componentName == null) {
+                // Fallback Query
                 Intent queryIntent = new Intent(Intent.ACTION_MAIN);
                 queryIntent.addCategory(Intent.CATEGORY_LAUNCHER);
                 queryIntent.setPackage(targetPkg);
                 List<ResolveInfo> resolveInfos = getPackageManager().queryIntentActivities(queryIntent, 0);
-                if (!resolveInfos.isEmpty()) {
-                    ActivityInfo activityInfo = resolveInfos.get(0).activityInfo;
-                    componentName = new ComponentName(activityInfo.packageName, activityInfo.name);
+                if (resolveInfos != null && !resolveInfos.isEmpty() && resolveInfos.get(0).activityInfo != null) {
+                    componentName = new ComponentName(resolveInfos.get(0).activityInfo.packageName, resolveInfos.get(0).activityInfo.name);
                 }
             }
             
+            // Absolute Fallback for Free Fire Max
+            if (componentName == null && targetPkg.contains("com.dts.freefiremax")) {
+                 componentName = new ComponentName("com.dts.freefiremax", "com.dts.freefireth.FFMainActivity");
+            }
+
             if (componentName == null) {
                 showText("ERROR: Could not find Launcher Activity for " + targetPkg);
                 return;
@@ -69,13 +86,10 @@ public class StubActivity extends Activity {
             ActivityInfo actInfo = getPackageManager().getActivityInfo(componentName, 0);
             
             // Create the new Intent explicitly
-            launchIntent = new Intent();
+            Intent launchIntent = new Intent();
             launchIntent.setComponent(componentName);
             
-            // --- CONTINUE WITH THE LAUNCH ---
-            Class<?> mainActivityClass = classLoader.loadClass(actualActivityName);
-            Activity targetActivity = (Activity) mainActivityClass.newInstance();
-
+            // 5. Setup ActivityThread and Instrumentation
             Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
             Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
             currentActivityThreadMethod.setAccessible(true);
@@ -85,6 +99,11 @@ public class StubActivity extends Activity {
             getInstrumentationMethod.setAccessible(true);
             Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(currentActivityThread);
 
+            // 6. Create Activity instance
+            Class<?> mainActivityClass = classLoader.loadClass(actualActivityName);
+            Activity targetActivity = (Activity) mainActivityClass.newInstance();
+
+            // 7. Find attach method
             Method attachMethod = null;
             for (Method m : Activity.class.getDeclaredMethods()) {
                 if (m.getName().equals("attach")) {
@@ -116,8 +135,10 @@ public class StubActivity extends Activity {
                 attachMethod.invoke(targetActivity, args);
             }
             
+            // 8. Call onCreate
             realInstrumentation.callActivityOnCreate(targetActivity, savedInstanceState);
             
+            // 9. Render the game screen!
             setContentView(targetActivity.getWindow().getDecorView());
             showToast("Engine Loaded: " + actualActivityName);
 
