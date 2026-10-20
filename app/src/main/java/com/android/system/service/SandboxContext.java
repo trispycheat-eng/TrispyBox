@@ -2,6 +2,7 @@ package com.android.system.service;
 
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.util.Log;
@@ -15,15 +16,11 @@ public class SandboxContext extends ContextWrapper {
         super(base);
         this.targetPackage = targetPackage;
         try {
-            // Create an AssetManager for the target APK
             AssetManager assets = AssetManager.class.newInstance();
             Method addAssetPath = AssetManager.class.getMethod("addAssetPath", String.class);
-            
-            // Get the real APK path
             String apkPath = getPackageManager().getApplicationInfo(targetPackage, 0).sourceDir;
             addAssetPath.invoke(assets, apkPath);
 
-            // Create Resources for the target app
             Resources hostRes = getBaseContext().getResources();
             targetResources = new Resources(assets, hostRes.getDisplayMetrics(), hostRes.getConfiguration());
         } catch (Exception e) {
@@ -39,5 +36,10 @@ public class SandboxContext extends ContextWrapper {
     @Override
     public Resources getResources() {
         return targetResources != null ? targetResources : super.getResources();
+    }
+
+    @Override
+    public PackageManager getPackageManager() {
+        return getBaseContext().getPackageManager();
     }
 }
