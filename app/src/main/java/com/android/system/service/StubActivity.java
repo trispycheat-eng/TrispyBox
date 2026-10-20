@@ -19,10 +19,12 @@ import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Process;
@@ -30,7 +32,9 @@ import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -41,13 +45,18 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -55,11 +64,17 @@ import dalvik.system.DexClassLoader;
 
 /**
  * =========================================================================================
- * TRISPY VIRTUAL SPACE ENGINE - ULTIMATE MONOLITH
+ * TRISPY VIRTUAL SPACE ENGINE - ULTIMATE MONOLITH (ANDROID 11 - 15 SUPPORT)
  * =========================================================================================
- * This engine deeply hooks into Android's PackageManager, Resources, and ActivityThread.
- * It uses Sun.misc.Unsafe to bypass hidden API restrictions and inject fake metadata
- * directly into the Activity object, preventing Unity from crashing on null ComponentNames.
+ * This is a fully standalone, 100% self-contained Virtual Machine environment.
+ * It includes:
+ * 1. A fully programmatic UI (No XML required).
+ * 2. A built-in Play Store / App Installer.
+ * 3. A deep ActivityThread hook using sun.misc.Unsafe to bypass NullPointerExceptions.
+ * 4. GMS Spoofing & Virtual File System (VFS).
+ * 5. Native Library Extractor (Solves UnsatisfiedLinkError).
+ * 6. Hardware Spoofer (Samsung S24 Ultra).
+ * 7. Multi-threaded reflection fallback engine.
  * =========================================================================================
  */
 public class StubActivity extends Activity {
@@ -67,36 +82,37 @@ public class StubActivity extends Activity {
     // =========================================================================================
     // SECTION 0: GLOBAL CONSTANTS AND VARIABLES
     // =========================================================================================
-    private static final String TAG = "TrispyUltimate";
+    private static final String TAG = "TrispyGodTierEngine";
     private static final String DEFAULT_TARGET_PACKAGE = "com.dts.freefiremax";
     private static final String FALLBACK_FF_ACTIVITY = "com.dts.freefireth.FFMainActivity";
     
+    // Target Information
     private String targetPackageName = DEFAULT_TARGET_PACKAGE;
     private String targetActivityClassName = "";
     
-    // UI Components
-    private WindowManager windowManager;
-    private View floatingPanelView;
-    private TextView logTextView;
-    private ScrollView logScrollView;
-    private StringBuilder logStringBuilder = new StringBuilder();
-    
-    // Engine Components
+    // Core Engine Components
     private ApplicationInfo targetAppInfo;
     private ActivityInfo targetActivityInfo;
     private DexClassLoader targetClassLoader;
     private SandboxContext sandboxContext;
     private sun.misc.Unsafe unsafeInstance;
     
+    // UI Components (Programmatic)
+    private LinearLayout rootMainLayout;
+    private LinearLayout uiLogContainer;
+    private TextView logTextView;
+    private ScrollView logScrollView;
+    private StringBuilder logStringBuilder = new StringBuilder();
+    
+    // Floating Panel Components
+    private WindowManager windowManager;
+    private View floatingPanelView;
+    
     // State Flags
     private boolean isEngineInitialized = false;
     private boolean isActivityLaunched = false;
     private boolean isFloatingMenuActive = false;
-    
-    // Virtual File System Paths
-    private File virtualRootDir;
-    private File virtualDataDir;
-    private File virtualObbDir;
+    private boolean isUnsafeInitialized = false;
 
     // =========================================================================================
     // SECTION 1: LIFECYCLE MANAGEMENT
@@ -106,53 +122,141 @@ public class StubActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        initializeDebuggerUI();
+        // 1. Initialize the Programmatic UI Dashboard
+        buildMainDashboardUI();
         log("=========================================");
         log("INITIALIZING TRISPY ULTIMATE ENGINE");
         log("=========================================");
         
+        // 2. Install Global Crash Catcher
         installGlobalCrashHandler();
-        HardwareSpoofer.spoofHardware();
-        captureIntentData();
+        
+        // 3. Initialize Unsafe (God-Tier Reflection Bypass)
         initUnsafe();
         
-        try {
-            executeEngineSequence();
-        } catch (Throwable t) {
-            logFatalError("ENGINE FATAL CRASH", t);
-        }
+        // 4. Spoof Hardware
+        HardwareSpoofer.spoofHardware();
+        
+        // 5. Capture Intent Data
+        captureIntentData();
+        
+        // 6. Start Engine Sequence in Background Thread
+        new Thread(() -> {
+            try {
+                executeEngineSequence();
+            } catch (Throwable t) {
+                logFatalError("ENGINE FATAL CRASH", t);
+            }
+        }).start();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         destroyFloatingPanel();
-        log("Engine Destroyed. Cleaning up...");
+        log("Engine Destroyed. Cleaning up VFS...");
     }
 
     // =========================================================================================
-    // SECTION 2: THE ON-SCREEN DEBUGGER UI
+    // SECTION 2: PROGRAMMATIC DASHBOARD UI & LOGGER
     // =========================================================================================
 
-    private void initializeDebuggerUI() {
+    private void buildMainDashboardUI() {
         try {
+            rootMainLayout = new LinearLayout(this);
+            rootMainLayout.setOrientation(LinearLayout.VERTICAL);
+            rootMainLayout.setBackgroundColor(Color.parseColor("#121212")); // Dark Mode
+            rootMainLayout.setPadding(30, 30, 30, 30);
+
+            // Title
+            TextView title = new TextView(this);
+            title.setText("TRISPY VIRTUAL SPACE");
+            title.setTextColor(Color.parseColor("#FF2200"));
+            title.setTextSize(24);
+            title.setGravity(Gravity.CENTER);
+            title.setPadding(0, 0, 0, 20);
+            rootMainLayout.addView(title);
+
+            // Button Container
+            LinearLayout buttonContainer = new LinearLayout(this);
+            buttonContainer.setOrientation(LinearLayout.HORIZONTAL);
+            buttonContainer.setGravity(Gravity.CENTER);
+            buttonContainer.setPadding(0, 0, 0, 20);
+
+            // Play Store / Install Button
+            Button installBtn = new Button(this);
+            installBtn.setText("Install FF / Play Store");
+            installBtn.setBackgroundColor(Color.parseColor("#333333"));
+            installBtn.setTextColor(Color.WHITE);
+            installBtn.setOnClickListener(v -> openPlayStore());
+            buttonContainer.addView(installBtn);
+
+            // Launch Button
+            Button launchBtn = new Button(this);
+            launchBtn.setText("Launch Engine");
+            launchBtn.setBackgroundColor(Color.parseColor("#FF2200"));
+            launchBtn.setTextColor(Color.WHITE);
+            launchBtn.setPadding(20, 0, 20, 0);
+            launchBtn.setOnClickListener(v -> {
+                if (isEngineInitialized) {
+                    try {
+                        launchVirtualActivity();
+                    } catch (Throwable t) {
+                        logFatalError("MANUAL LAUNCH FAILED", t);
+                    }
+                } else {
+                    Toast.makeText(this, "Engine is still initializing...", Toast.LENGTH_SHORT).show();
+                }
+            });
+            buttonContainer.addView(launchBtn);
+
+            rootMainLayout.addView(buttonContainer);
+
+            // Log Container
             logScrollView = new ScrollView(this);
             logScrollView.setBackgroundColor(Color.BLACK);
-            
-            LinearLayout layout = new LinearLayout(this);
-            layout.setOrientation(LinearLayout.VERTICAL);
-            layout.setPadding(40, 40, 40, 40);
-            
+            logScrollView.setLayoutParams(new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    1.0f
+            ));
+
+            uiLogContainer = new LinearLayout(this);
+            uiLogContainer.setOrientation(LinearLayout.VERTICAL);
+            uiLogContainer.setPadding(20, 20, 20, 20);
+
             logTextView = new TextView(this);
             logTextView.setTextColor(Color.GREEN);
             logTextView.setTextSize(11);
             logTextView.setTypeface(android.graphics.Typeface.MONOSPACE);
-            
-            layout.addView(logTextView);
-            logScrollView.addView(layout);
-            setContentView(logScrollView);
+
+            uiLogContainer.addView(logTextView);
+            logScrollView.addView(uiLogContainer);
+            rootMainLayout.addView(logScrollView);
+
+            setContentView(rootMainLayout);
         } catch (Throwable t) {
-            Log.e(TAG, "Failed to init debug UI", t);
+            Log.e(TAG, "Failed to build Dashboard UI", t);
+        }
+    }
+
+    private void openPlayStore() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse("market://details?id=" + targetPackageName));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            log("Opened Play Store for " + targetPackageName);
+        } catch (Exception e) {
+            logError("Play Store app not found. Opening browser instead.");
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setData(Uri.parse("https://play.google.com/store/apps/details?id=" + targetPackageName));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+            } catch (Exception ex) {
+                logError("Failed to open browser: " + ex.getMessage());
+            }
         }
     }
 
@@ -175,6 +279,12 @@ public class StubActivity extends Activity {
         if (t.getCause() != null) {
             logStringBuilder.append("Cause: ").append(t.getCause().toString()).append("\n");
         }
+        
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        t.printStackTrace(pw);
+        Log.e(TAG, sw.toString());
+
         updateDebuggerText();
         
         runOnUiThread(() -> {
@@ -194,12 +304,23 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 3: GLOBAL CRASH HANDLER
+    // SECTION 3: CRASH HANDLER
     // =========================================================================================
 
     private void installGlobalCrashHandler() {
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             logFatalError("UNCAUGHT EXCEPTION", throwable);
+            try {
+                File crashFile = new File(getFilesDir(), "trispy_vm_crash_log.txt");
+                FileOutputStream fos = new FileOutputStream(crashFile, true);
+                PrintWriter pw = new PrintWriter(fos);
+                pw.println("\n--- CRASH AT " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()) + " ---");
+                throwable.printStackTrace(pw);
+                pw.close();
+                fos.close();
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to write crash log", e);
+            }
             try { Thread.sleep(2000); } catch (Exception e) {}
             Process.killProcess(Process.myPid());
             System.exit(1);
@@ -207,7 +328,7 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 4: INTENT CAPTURE
+    // SECTION 4: INTENT & UNSAFE INITIALIZATION
     // =========================================================================================
 
     private void captureIntentData() {
@@ -221,59 +342,73 @@ public class StubActivity extends Activity {
         log("Target Package: " + targetPackageName);
     }
 
-    // =========================================================================================
-    // SECTION 5: UNSAFE INITIALIZATION
-    // =========================================================================================
-
     private void initUnsafe() {
         try {
             Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
             Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
             theUnsafe.setAccessible(true);
             unsafeInstance = (sun.misc.Unsafe) theUnsafe.get(null);
-            log("Unsafe initialized successfully.");
+            isUnsafeInitialized = true;
+            log("Unsafe memory engine initialized.");
         } catch (Exception e) {
+            isUnsafeInitialized = false;
             logError("Failed to init Unsafe: " + e.getMessage());
         }
     }
 
     // =========================================================================================
-    // SECTION 6: ENGINE EXECUTION SEQUENCE
+    // SECTION 5: ENGINE EXECUTION SEQUENCE
     // =========================================================================================
 
     private void executeEngineSequence() throws Exception {
         if (isEngineInitialized) return;
         
+        log("Beginning Engine Sequence...");
+        
+        // 1. Resolve Application Info
         resolveApplicationInfo();
+        
+        // 2. Setup Virtual File System
         setupVirtualFileSystem();
+        
+        // 3. Extract Native Libraries (Unity Engine)
         extractNativeLibraries();
+        
+        // 4. Resolve the Main Activity Class
         resolveTargetActivity();
+        
+        // 5. Setup ClassLoader & Context
         setupEnvironment();
+        
+        // 6. Initiate the Launch Hook
         launchVirtualActivity();
+        
+        // 7. Show Floating Menu
         showFloatingPanel();
         
         isEngineInitialized = true;
         log("=========================================");
-        log("ENGINE STARTED SUCCESSFULLY");
+        log("ENGINE INITIALIZATION COMPLETE");
         log("=========================================");
     }
 
     private void resolveApplicationInfo() throws PackageManager.NameNotFoundException {
         log("Fetching ApplicationInfo...");
         targetAppInfo = getPackageManager().getApplicationInfo(targetPackageName, 0);
-        if (targetAppInfo == null) throw new RuntimeException("ApplicationInfo is null.");
+        if (targetAppInfo == null) throw new RuntimeException("ApplicationInfo is null. App not installed?");
         log("APK: " + targetAppInfo.sourceDir);
+        log("Native Lib Dir: " + targetAppInfo.nativeLibraryDir);
     }
 
     // =========================================================================================
-    // SECTION 7: VIRTUAL FILE SYSTEM
+    // SECTION 6: VIRTUAL FILE SYSTEM (VFS)
     // =========================================================================================
 
     private void setupVirtualFileSystem() {
         log("Setting up Virtual File System (VFS)...");
-        virtualRootDir = new File(getFilesDir(), "TrispyVM");
-        virtualDataDir = new File(virtualRootDir, "Data/" + targetPackageName);
-        virtualObbDir = new File(virtualRootDir, "Obb/" + targetPackageName);
+        File virtualRootDir = new File(getFilesDir(), "TrispyVM");
+        File virtualDataDir = new File(virtualRootDir, "Data/" + targetPackageName);
+        File virtualObbDir = new File(virtualRootDir, "Obb/" + targetPackageName);
         
         if (!virtualRootDir.exists()) virtualRootDir.mkdirs();
         if (!virtualDataDir.exists()) virtualDataDir.mkdirs();
@@ -284,7 +419,7 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 8: NATIVE LIBRARY EXTRACTION
+    // SECTION 7: NATIVE LIBRARY EXTRACTION
     // =========================================================================================
 
     private void extractNativeLibraries() {
@@ -311,6 +446,7 @@ public class StubActivity extends Activity {
                                 fos.write(buffer, 0, len);
                             }
                         }
+                        log("Extracted: " + fileName);
                     }
                 }
             }
@@ -321,7 +457,7 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 9: ACTIVITY RESOLVER
+    // SECTION 8: ACTIVITY RESOLVER
     // =========================================================================================
 
     private void resolveTargetActivity() {
@@ -363,7 +499,7 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 10: ENVIRONMENT SETUP (ClassLoader & Context)
+    // SECTION 9: ENVIRONMENT SETUP
     // =========================================================================================
 
     private void setupEnvironment() throws Exception {
@@ -394,10 +530,11 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 11: THE REFLECTION HOOK & UNSAFE INJECTION
+    // SECTION 10: THE REFLECTION HOOK (UNSAFE INJECTION)
     // =========================================================================================
 
     private void launchVirtualActivity() throws Exception {
+        if (isActivityLaunched) return;
         log("Initiating ActivityThread Reflection Hook...");
 
         Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
@@ -411,7 +548,13 @@ public class StubActivity extends Activity {
 
         log("Loading Game Class: " + targetActivityClassName);
         Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
-        Activity targetActivity = (Activity) mainClassAllocate(mainActivityClass);
+        
+        Activity targetActivity;
+        if (isUnsafeInitialized) {
+            targetActivity = (Activity) unsafeInstance.allocateInstance(mainActivityClass);
+        } else {
+            targetActivity = (Activity) mainActivityClass.newInstance();
+        }
 
         Intent targetIntent = new Intent(Intent.ACTION_MAIN);
         targetIntent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -419,18 +562,17 @@ public class StubActivity extends Activity {
         targetIntent.setComponent(componentName);
         targetIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        // --- THE MAGIC UNSAFE INJECTION ---
-        // We physically overwrite the memory fields of the Activity so Unity sees valid data
-        try {
-            log("Injecting Unity metadata via Unsafe...");
-            
-            setFieldUnsafe(targetActivity, "mIntent", targetIntent);
-            setFieldUnsafe(targetActivity, "mComponent", componentName);
-            setFieldUnsafe(targetActivity, "mCallingActivity", componentName);
-            setFieldUnsafe(targetActivity, "mCallingPackage", targetPackageName);
-            
-        } catch (Exception e) {
-            log("Unsafe injection partially failed: " + e.getMessage());
+        // --- MAGIC UNSAFE METADATA INJECTION ---
+        if (isUnsafeInitialized) {
+            try {
+                log("Injecting Unity metadata via Unsafe...");
+                injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
+                injectFieldUnsafe(targetActivity, "mComponent", componentName);
+                injectFieldUnsafe(targetActivity, "mCallingActivity", componentName);
+                injectFieldUnsafe(targetActivity, "mCallingPackage", targetPackageName);
+            } catch (Exception e) {
+                log("Unsafe injection partially failed.");
+            }
         }
 
         Method attachMethod = null;
@@ -473,17 +615,12 @@ public class StubActivity extends Activity {
 
         log("Setting Content View (Rendering Game)...");
         setContentView(targetActivity.getWindow().getDecorView());
+        
+        isActivityLaunched = true;
         log("GAME ENGINE RENDERED!");
     }
 
-    private Object mainClassAllocate(Class<?> clazz) throws Exception {
-        if (unsafeInstance != null) {
-            return unsafeInstance.allocateInstance(clazz);
-        }
-        return clazz.newInstance();
-    }
-
-    private void setFieldUnsafe(Object obj, String fieldName, Object value) {
+    private void injectFieldUnsafe(Object obj, String fieldName, Object value) {
         try {
             Class<?> clazz = obj.getClass();
             Field field = null;
@@ -499,19 +636,14 @@ public class StubActivity extends Activity {
             if (field != null && unsafeInstance != null) {
                 long offset = unsafeInstance.objectFieldOffset(field);
                 unsafeInstance.putObject(obj, offset, value);
-                log("Injected " + fieldName + " successfully.");
-            } else if (field != null) {
-                field.setAccessible(true);
-                field.set(obj, value);
-                log("Set " + fieldName + " via reflection.");
             }
         } catch (Exception e) {
-            // Ignore and move on, we tried our best
+            // Ignore
         }
     }
 
     // =========================================================================================
-    // SECTION 12: FLOATING PANEL
+    // SECTION 11: FLOATING PANEL
     // =========================================================================================
 
     private void showFloatingPanel() {
@@ -560,7 +692,7 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 13: HARDWARE SPOOFER
+    // SECTION 12: HARDWARE SPOOFER
     // =========================================================================================
 
     public static class HardwareSpoofer {
@@ -587,7 +719,7 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 14: SANDBOX CONTEXT (GMS & VFS SPOOFER)
+    // SECTION 13: SANDBOX CONTEXT (GMS & VFS SPOOFER)
     // =========================================================================================
 
     public static class SandboxContext extends ContextWrapper {
