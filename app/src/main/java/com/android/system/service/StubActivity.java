@@ -24,13 +24,13 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.Message;
 import android.os.Process;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -389,26 +389,26 @@ public class StubActivity extends Activity {
 
     private void launchVirtualActivity() throws Exception {
         if (isActivityLaunched) return;
-        log("Initiating ActivityThread Hook (Bypassing Realme IActivityExt)...");
+        log("Initiating ActivityThread Hook...");
 
         Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
         Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
         currentActivityThreadMethod.setAccessible(true);
         Object currentActivityThread = currentActivityThreadMethod.invoke(null);
 
-        Field mHField = activityThreadClass.getDeclaredField("mH");
-        mHField.setAccessible(true);
-        Handler mH = (Handler) mHField.get(currentActivityThread);
+        Method getInstrumentationMethod = activityThreadClass.getDeclaredMethod("getInstrumentation");
+        getInstrumentationMethod.setAccessible(true);
+        Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(currentActivityThread);
 
-        Class<?> recordClass = Class.forName("android.app.ActivityThread$ActivityClientRecord");
+        Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
         
-        // THE FIX: Use Unsafe to allocate ActivityClientRecord bypassing the private constructor
-        Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
-        Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
-        theUnsafe.setAccessible(true);
-        Object unsafe = theUnsafe.get(null);
-        Method allocateInstanceMethod = unsafeClass.getMethod("allocateInstance", Class.class);
-        Object record = allocateInstanceMethod.invoke(unsafe, recordClass);
+        Activity targetActivity;
+        try {
+            // We instantiate normally so Realme hooks are applied
+            targetActivity = (Activity) mainActivityClass.newInstance();
+        } catch (Throwable t) {
+            targetActivity = (Activity) mainActivityClass.newInstance();
+        }
 
         Intent targetIntent = new Intent(Intent.ACTION_MAIN);
         targetIntent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -416,33 +416,107 @@ public class StubActivity extends Activity {
         targetIntent.setComponent(componentName);
         targetIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        Field intentField = recordClass.getDeclaredField("intent");
-        intentField.setAccessible(true);
-        intentField.set(record, targetIntent);
+        Method attachMethod = null;
+        for (Method m : Activity.class.getDeclaredMethods()) {
+            if (m.getName().equals("attach")) {
+                attachMethod = m;
+                break;
+            }
+        }
 
-        Field activityInfoField = recordClass.getDeclaredField("activityInfo");
-        activityInfoField.setAccessible(true);
-        activityInfoField.set(record, targetActivityInfo);
+        if (attachMethod != null) {
+            attachMethod.setAccessible(true);
+            int paramCount = attachMethod.getParameterCount();
+            Object[] args = new Object[paramCount];
+            
+            args[0] = sandboxContext;
+            args[1] = currentActivityThread;
+            args[2] = realInstrumentation;
+            args[3] = new Binder();
+            args[4] = 0;
+            args[5] = getApplication();
+            args[6] = targetIntent;
+            args[7] = targetActivityInfo;
+            args[8] = "";
+            args[9] = null;
+            args[10] = "";
+            args[11] = null;
+            args[12] = null;
+            
+            for (int i = 13; i < paramCount; i++) args[i] = null;
 
-        Field tokenField = recordClass.getDeclaredField("token");
-        tokenField.setAccessible(true);
-        tokenField.set(record, new Binder());
+            attachMethod.invoke(targetActivity, args);
+        }
+
+        // INJECT EVERYTHING BEFORE ONCREATE
+        log("Injecting Bypass Environment...");
         
+        Application dummyApp = (Application) Class.forName("sun.misc.Unsafe").getMethod("allocateInstance", Class.class).invoke(getUnsafeInstance(), Application.class);
+        
+        // 1. Inject Context & Thread
+        VirtualWindowHelper.forceInjectField(targetActivity, "mBase", sandboxContext);
+        VirtualWindowHelper.forceInjectField(targetActivity, "mApplication", dummyApp);
+        VirtualWindowHelper.forceInjectField(targetActivity, "mIntent", targetIntent);
+        VirtualWindowHelper.forceInjectField(targetActivity, "mComponent", componentName);
+        VirtualWindowHelper.forceInjectField(targetActivity, "mCallingActivity", componentName);
+        VirtualWindowHelper.forceInjectField(targetActivity, "mCallingPackage", targetPackageName);
+        VirtualWindowHelper.forceInjectField(targetActivity, "mUiThread", Thread.currentThread());
+        VirtualWindowHelper.forceInjectField(targetActivity, "mMainThread", currentActivityThread);
+        VirtualWindowHelper.forceInjectField(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
+
+        // 2. Inject Realme IActivityExt Proxy to prevent checkViewCacheThread crash
+        RealmeBypass.inject(targetActivity);
+
+        // 3. Inject Window
         try {
-            Field customIntentField = recordClass.getDeclaredField("customIntent");
-            customIntentField.setAccessible(true);
-            customIntentField.set(record, targetIntent);
-        } catch (Exception e) {}
+            Class<?> phoneWindowClass = Class.forName("com.android.internal.policy.PhoneWindow");
+            Constructor<?> windowConstructor = phoneWindowClass.getConstructor(Context.class);
+            Object phoneWindow = windowConstructor.newInstance(sandboxContext);
+            
+            WindowManager windowManager = (WindowManager) sandboxContext.getSystemService(Context.WINDOW_SERVICE);
+            VirtualWindowHelper.forceInjectField(targetActivity, "mWindowManager", windowManager);
+            VirtualWindowHelper.forceInjectField(targetActivity, "mWindow", phoneWindow);
+            
+            Method getDecorViewMethod = phoneWindowClass.getMethod("getDecorView");
+            Object decorView = getDecorViewMethod.invoke(phoneWindow);
+            VirtualWindowHelper.forceInjectField(targetActivity, "mDecor", decorView);
+        } catch (Throwable t) {
+            log("Window injection failed.");
+        }
 
-        Message msg = Message.obtain();
-        msg.what = 100; // LAUNCH_ACTIVITY
-        msg.obj = record;
+        log("Invoking onCreate() directly...");
+        
+        Method onCreateMethod = null;
+        Class<?> clazz = targetActivity.getClass();
+        while (clazz != null) {
+            try {
+                onCreateMethod = clazz.getDeclaredMethod("onCreate", Bundle.class);
+                break;
+            } catch (NoSuchMethodException e) {
+                clazz = clazz.getSuperclass();
+            }
+        }
+        
+        if (onCreateMethod != null) {
+            onCreateMethod.setAccessible(true);
+            onCreateMethod.invoke(targetActivity, (Bundle) null);
+        } else {
+            logError("Could not find onCreate method");
+        }
 
-        log("Sending LAUNCH_ACTIVITY to Realme OS...");
-        mH.sendMessage(msg);
+        VirtualWindowHelper.forceInjectField(targetActivity, "mApplication", getApplication());
+
+        setContentView(targetActivity.getWindow().getDecorView());
         
         isActivityLaunched = true;
-        log("ACTIVITY LAUNCH SENT! If you see this, wait for the game to load.");
+        log("GAME ENGINE RENDERED!");
+    }
+
+    private Object getUnsafeInstance() throws Exception {
+        Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+        Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
+        theUnsafe.setAccessible(true);
+        return theUnsafe.get(null);
     }
 
     private void showFloatingPanel() {
