@@ -1,15 +1,10 @@
 package com.android.system.service;
 
 import android.app.Activity;
-import android.app.ActivityThread;
-import android.app.Instrumentation;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
-import android.os.IBinder;
-import android.os.Looper;
 import android.util.Log;
 import android.widget.TextView;
 import android.graphics.Color;
@@ -31,7 +26,7 @@ public class StubActivity extends Activity {
             ApplicationInfo appInfo = getPackageManager().getApplicationInfo(targetPkg, 0);
             String apkPath = appInfo.sourceDir;
             
-            // 2. Extract Native Libs
+            // 2. Extract Native Libs (using the class we created)
             File extractedLibs = NativeLibraryExtractor.extractLibs(this, apkPath, targetPkg);
             
             // 3. Setup Sandbox Context and ClassLoader
@@ -46,21 +41,25 @@ public class StubActivity extends Activity {
             String actualActivityName = launchIntent.getComponent().getClassName();
             ActivityInfo actInfo = getPackageManager().getActivityInfo(launchIntent.getComponent(), 0);
             
-            // 5. Setup Unsafe to bypass ActivityClientRecord constructor
+            // 5. Setup Unsafe via Reflection to bypass constructor
             Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
             Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
             theUnsafe.setAccessible(true);
-            sun.misc.Unsafe unsafe = (sun.misc.Unsafe) theUnsafe.get(null);
+            Object unsafeInstance = theUnsafe.get(null);
+            Method allocateInstanceMethod = unsafeClass.getMethod("allocateInstance", Class.class);
 
+            // 6. Setup ActivityThread via Reflection
             Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
             Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
             currentActivityThreadMethod.setAccessible(true);
             Object currentActivityThread = currentActivityThreadMethod.invoke(null);
 
             Class<?> recordClass = Class.forName("android.app.ActivityThread$ActivityClientRecord");
-            Object record = unsafe.allocateInstance(recordClass);
             
-            // 6. Set fields using Reflection
+            // Allocate record without calling constructor
+            Object record = allocateInstanceMethod.invoke(unsafeInstance, recordClass);
+            
+            // 7. Set fields using Reflection
             Field intentField = recordClass.getDeclaredField("intent");
             intentField.setAccessible(true);
             intentField.set(record, launchIntent);
@@ -73,7 +72,7 @@ public class StubActivity extends Activity {
             tokenField.setAccessible(true);
             tokenField.set(record, new android.os.Binder());
 
-            // 7. Call performLaunchActivity
+            // 8. Call performLaunchActivity
             Method performLaunchActivityMethod = activityThreadClass.getDeclaredMethod("performLaunchActivity", recordClass, null);
             performLaunchActivityMethod.setAccessible(true);
             
@@ -81,7 +80,6 @@ public class StubActivity extends Activity {
             
             if (targetActivity != null) {
                 showText("SUCCESS!\nActivity Launched: " + targetActivity.getClass().getSimpleName());
-                // In the next step, we will get the SurfaceView from targetActivity to actually render it
             } else {
                 showText("ERROR: performLaunchActivity returned null.");
             }
@@ -102,4 +100,4 @@ public class StubActivity extends Activity {
         tv.setBackgroundColor(Color.BLACK);
         setContentView(tv);
     }
-}
+        }
