@@ -5,6 +5,7 @@ add_library(
     trispy_native
     SHARED
     NativeHook.cpp
+    AceShield.cpp
 )
 
 target_link_libraries(
