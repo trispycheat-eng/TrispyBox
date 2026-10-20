@@ -4,13 +4,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Message;
+import android.util.Log;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 public class VirtualCore {
     private static VirtualCore instance;
     private Context hostContext;
-    private String targetPackage = "com.dts.freefiremax"; // Default FF Max
+    private String targetPackage = "com.dts.freefiremax";
 
     public static VirtualCore get() {
         if (instance == null) instance = new VirtualCore();
@@ -19,8 +20,19 @@ public class VirtualCore {
 
     public void startup(Context context) {
         this.hostContext = context;
-        System.loadLibrary("trispy_native"); // Load our C++ Bypass
-        hookActivityThread(); // Hijack the system launcher
+        
+        try {
+            System.loadLibrary("trispy_native"); 
+            Log.d("TrispySpace", "Native loaded.");
+        } catch (Throwable t) {
+            Log.e("TrispySpace", "Native load failed: " + t.getMessage());
+        }
+        
+        try {
+            hookActivityThread(); 
+        } catch (Throwable t) {
+            Log.e("TrispySpace", "Hook failed: " + t.getMessage());
+        }
     }
 
     public void setTargetPackage(String pkg) {
@@ -39,7 +51,6 @@ public class VirtualCore {
         }
     }
 
-    // --- THE MAGIC: Hooking ActivityThread ---
     private void hookActivityThread() {
         try {
             Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
@@ -47,12 +58,10 @@ public class VirtualCore {
             currentActivityThreadMethod.setAccessible(true);
             Object currentActivityThread = currentActivityThreadMethod.invoke(null);
 
-            // Get the mH (Handler) field
             Field mHField = activityThreadClass.getDeclaredField("mH");
             mHField.setAccessible(true);
             Handler mH = (Handler) mHField.get(currentActivityThread);
 
-            // Set our custom callback to intercept messages
             Field mCallbackField = Handler.class.getDeclaredField("mCallback");
             mCallbackField.setAccessible(true);
             
@@ -68,24 +77,20 @@ public class VirtualCore {
                             
                             if (intent != null && intent.getComponent() != null) {
                                 String pkg = intent.getComponent().getPackageName();
-                                
-                                // IF THE SYSTEM IS TRYING TO LAUNCH OUR TARGET APP...
                                 if (pkg.equals(targetPackage)) {
-                                    // Redirect it to our StubActivity!
                                     intent.setClassName(hostContext, "com.trispy.space.StubActivity");
-                                    // Save the original target package so StubActivity knows what to load
                                     intent.putExtra("TRISPY_TARGET_PKG", pkg);
                                 }
                             }
-                        } catch (Exception e) {
-                            e.printStackTrace();
+                        } catch (Throwable e) {
+                            // Silent fail on message processing
                         }
                     }
-                    return false; // Let the system continue processing
+                    return false; 
                 }
             });
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (Throwable e) {
+            Log.e("TrispySpace", "Reflection error: " + e.getMessage());
         }
     }
 }
