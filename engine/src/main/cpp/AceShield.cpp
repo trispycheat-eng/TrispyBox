@@ -16,7 +16,7 @@
 // 1. Property Spoofer (Hides Sandbox, Spoofs Samsung)
 static int (*orig_prop_get)(const char* name, char* value) = nullptr;
 
-int fake_prop_get(const char* name, char* value) {
+int ace_fake_prop_get(const char* name, char* value) {
     if (name == nullptr) return 0;
     if (strcmp(name, "ro.kernel.qemu") == 0) { strcpy(value, "0"); return 1; }
     if (strcmp(name, "ro.hardware") == 0) { strcpy(value, "qcom"); return 4; }
