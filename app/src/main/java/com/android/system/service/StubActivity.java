@@ -1,14 +1,13 @@
 package com.android.system.service;
 
 import android.app.Activity;
-import android.app.Application;
+import android.app.ActivityThread;
 import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
-import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
@@ -32,7 +31,7 @@ public class StubActivity extends Activity {
             ApplicationInfo appInfo = getPackageManager().getApplicationInfo(targetPkg, 0);
             String apkPath = appInfo.sourceDir;
             
-            // 2. Extract Native Libs (Fixes UnsatisfiedLinkError)
+            // 2. Extract Native Libs
             File extractedLibs = NativeLibraryExtractor.extractLibs(this, apkPath, targetPkg);
             
             // 3. Setup Sandbox Context and ClassLoader
@@ -46,18 +45,22 @@ public class StubActivity extends Activity {
             Intent launchIntent = getPackageManager().getLaunchIntentForPackage(targetPkg);
             String actualActivityName = launchIntent.getComponent().getClassName();
             ActivityInfo actInfo = getPackageManager().getActivityInfo(launchIntent.getComponent(), 0);
-            Class<?> mainActivityClass = classLoader.loadClass(actualActivityName);
             
-            // 5. The REAL Android Launch Trick (Reflection)
+            // 5. Setup Unsafe to bypass ActivityClientRecord constructor
+            Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+            Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
+            theUnsafe.setAccessible(true);
+            sun.misc.Unsafe unsafe = (sun.misc.Unsafe) theUnsafe.get(null);
+
             Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
             Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
             currentActivityThreadMethod.setAccessible(true);
             Object currentActivityThread = currentActivityThreadMethod.invoke(null);
 
-            // Create ActivityClientRecord
             Class<?> recordClass = Class.forName("android.app.ActivityThread$ActivityClientRecord");
-            Object record = recordClass.newInstance();
+            Object record = unsafe.allocateInstance(recordClass);
             
+            // 6. Set fields using Reflection
             Field intentField = recordClass.getDeclaredField("intent");
             intentField.setAccessible(true);
             intentField.set(record, launchIntent);
@@ -66,12 +69,13 @@ public class StubActivity extends Activity {
             activityInfoField.setAccessible(true);
             activityInfoField.set(record, actInfo);
 
-            // Call performLaunchActivity
+            Field tokenField = recordClass.getDeclaredField("token");
+            tokenField.setAccessible(true);
+            tokenField.set(record, new android.os.Binder());
+
+            // 7. Call performLaunchActivity
             Method performLaunchActivityMethod = activityThreadClass.getDeclaredMethod("performLaunchActivity", recordClass, null);
             performLaunchActivityMethod.setAccessible(true);
-            
-            // Setup thread and Looper (Required for Android UI)
-            Looper.prepareMainLooper();
             
             Activity targetActivity = (Activity) performLaunchActivityMethod.invoke(currentActivityThread, record, null);
             
