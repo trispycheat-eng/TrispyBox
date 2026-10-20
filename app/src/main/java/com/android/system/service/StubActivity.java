@@ -12,6 +12,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.Signature;
 import android.content.res.AssetManager;
@@ -22,45 +23,33 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.Process;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
-import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -68,7 +57,10 @@ import dalvik.system.DexClassLoader;
 
 /**
  * =========================================================================================
- * TRISPY VIRTUAL SPACE ENGINE - THE MONOLITH (1000+ LINES)
+ * TRISPY VIRTUAL SPACE ENGINE - THE ULTIMATE MONOLITH
+ * =========================================================================================
+ * This engine deeply hooks into Android's PackageManager, Resources, and ActivityThread.
+ * It spoofs GMS, fakes OBB paths, extracts native libs, and launches the target Activity.
  * =========================================================================================
  */
 public class StubActivity extends Activity {
@@ -76,7 +68,7 @@ public class StubActivity extends Activity {
     // =========================================================================================
     // SECTION 0: GLOBAL CONSTANTS AND VARIABLES
     // =========================================================================================
-    private static final String TAG = "TrispyMonolith";
+    private static final String TAG = "TrispyUltimate";
     private static final String DEFAULT_TARGET_PACKAGE = "com.dts.freefiremax";
     private static final String FALLBACK_FF_ACTIVITY = "com.dts.freefireth.FFMainActivity";
     
@@ -96,11 +88,13 @@ public class StubActivity extends Activity {
     private DexClassLoader targetClassLoader;
     private SandboxContext sandboxContext;
     
-    // State
+    // State Flags
     private boolean isEngineInitialized = false;
-    private boolean isGameLaunched = false;
+    private boolean isActivityLaunched = false;
+    private boolean isFloatingMenuActive = false;
     
     // Virtual File System Paths
+    private File virtualRootDir;
     private File virtualDataDir;
     private File virtualObbDir;
 
@@ -112,22 +106,15 @@ public class StubActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Step 1: Initialize the UI Debugger so we can see everything
         initializeDebuggerUI();
         log("=========================================");
-        log("INITIALIZING TRISPY VIRTUAL SPACE ENGINE");
+        log("INITIALIZING TRISPY ULTIMATE ENGINE");
         log("=========================================");
         
-        // Step 2: Install the global crash handler
-        installCrashHandler();
-        
-        // Step 3: Spoof the Hardware (Java level)
+        installGlobalCrashHandler();
         HardwareSpoofer.spoofHardware();
-        
-        // Step 4: Capture Intent Data
         captureIntentData();
         
-        // Step 5: Start the Engine
         try {
             executeEngineSequence();
         } catch (Throwable t) {
@@ -209,30 +196,24 @@ public class StubActivity extends Activity {
     // SECTION 3: CRASH HANDLER
     // =========================================================================================
 
-    private void installCrashHandler() {
+    private void installGlobalCrashHandler() {
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             logFatalError("UNCAUGHT EXCEPTION", throwable);
             
             try {
                 File crashFile = new File(getFilesDir(), "trispy_crash_log.txt");
-                FileWriter writer = new FileWriter(crashFile, true);
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new PrintWriter(sw);
+                FileOutputStream fos = new FileOutputStream(crashFile, true);
+                PrintWriter pw = new PrintWriter(fos);
+                pw.println("\n--- CRASH AT " + System.currentTimeMillis() + " ---");
                 throwable.printStackTrace(pw);
-                
-                writer.write("\n--- CRASH AT " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()) + " ---\n");
-                writer.write(sw.toString());
-                writer.close();
+                pw.close();
+                fos.close();
             } catch (IOException e) {
                 Log.e(TAG, "Failed to write crash log", e);
             }
             
-            try {
-                Thread.sleep(3000);
-            } catch (InterruptedException e) {
-                // Ignore
-            }
-            android.os.Process.killProcess(android.os.Process.myPid());
+            try { Thread.sleep(2000); } catch (Exception e) {}
+            Process.killProcess(Process.myPid());
             System.exit(1);
         });
     }
@@ -280,6 +261,7 @@ public class StubActivity extends Activity {
             throw new RuntimeException("ApplicationInfo is null. Is the game installed?");
         }
         log("APK: " + targetAppInfo.sourceDir);
+        log("Native Lib Dir: " + targetAppInfo.nativeLibraryDir);
     }
 
     // =========================================================================================
@@ -288,9 +270,12 @@ public class StubActivity extends Activity {
 
     private void setupVirtualFileSystem() {
         log("Setting up Virtual File System (VFS)...");
-        virtualDataDir = new File(getFilesDir(), "TrispyVM_Data/" + targetPackageName);
-        virtualObbDir = new File(getFilesDir(), "TrispyVM_Obb/" + targetPackageName);
         
+        virtualRootDir = new File(getFilesDir(), "TrispyVM");
+        virtualDataDir = new File(virtualRootDir, "Data/" + targetPackageName);
+        virtualObbDir = new File(virtualRootDir, "Obb/" + targetPackageName);
+        
+        if (!virtualRootDir.exists()) virtualRootDir.mkdirs();
         if (!virtualDataDir.exists()) virtualDataDir.mkdirs();
         if (!virtualObbDir.exists()) virtualObbDir.mkdirs();
         
@@ -304,7 +289,7 @@ public class StubActivity extends Activity {
 
     private void extractNativeLibraries() {
         log("Extracting Native Libraries from APK...");
-        File libDir = new File(getFilesDir(), "TrispyVM_Libs/" + targetPackageName);
+        File libDir = new File(getFilesDir(), "TrispyVM/Libs/" + targetPackageName);
         if (!libDir.exists()) libDir.mkdirs();
 
         try (ZipFile zip = new ZipFile(targetAppInfo.sourceDir)) {
@@ -396,7 +381,7 @@ public class StubActivity extends Activity {
         }
         
         File dexOutputDir = getDir("trispy_opt_dex", Context.MODE_PRIVATE);
-        File libDir = new File(getFilesDir(), "TrispyVM_Libs/" + targetPackageName);
+        File libDir = new File(getFilesDir(), "TrispyVM/Libs/" + targetPackageName);
         
         targetClassLoader = new DexClassLoader(
                 dexPathBuilder.toString(),
@@ -416,27 +401,22 @@ public class StubActivity extends Activity {
     private void launchVirtualActivity() throws Exception {
         log("Initiating ActivityThread Reflection Hook...");
 
-        // Step 1: Get ActivityThread via reflection (No imports!)
         Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
         Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
         currentActivityThreadMethod.setAccessible(true);
         Object currentActivityThread = currentActivityThreadMethod.invoke(null);
 
-        // Step 2: Get Instrumentation
         Method getInstrumentationMethod = activityThreadClass.getDeclaredMethod("getInstrumentation");
         getInstrumentationMethod.setAccessible(true);
         Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(currentActivityThread);
 
-        // Step 3: Instantiate Target Activity
         log("Loading Game Class: " + targetActivityClassName);
         Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
         Activity targetActivity = (Activity) mainActivityClass.newInstance();
 
-        // Step 4: Build Intent
         Intent targetIntent = new Intent();
         targetIntent.setComponent(new ComponentName(targetPackageName, targetActivityClassName));
 
-        // Step 5: Find Attach Method
         Method attachMethod = null;
         for (Method m : Activity.class.getDeclaredMethods()) {
             if (m.getName().equals("attach")) {
@@ -445,7 +425,6 @@ public class StubActivity extends Activity {
             }
         }
 
-        // Step 6: Invoke Attach
         if (attachMethod != null) {
             attachMethod.setAccessible(true);
             int paramCount = attachMethod.getParameterCount();
@@ -473,11 +452,9 @@ public class StubActivity extends Activity {
             attachMethod.invoke(targetActivity, args);
         }
 
-        // Step 7: Invoke OnCreate
         log("Invoking onCreate()...");
         realInstrumentation.callActivityOnCreate(targetActivity, null);
 
-        // Step 8: Set Content View
         log("Setting Content View (Rendering Game)...");
         setContentView(targetActivity.getWindow().getDecorView());
         log("GAME ENGINE RENDERED!");
@@ -624,6 +601,16 @@ public class StubActivity extends Activity {
                     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                         String methodName = method.getName();
                         
+                        // Fix: Provide a valid Launch Intent if FF asks for it
+                        if (methodName.equals("getLaunchIntentForPackage") && args != null && args.length > 0) {
+                            String pkg = (String) args[0];
+                            if (pkg != null && pkg.equals(targetPkg)) {
+                                Intent intent = new Intent();
+                                intent.setComponent(new ComponentName(targetPkg, "com.dts.freefireth.FFMainActivity"));
+                                return intent;
+                            }
+                        }
+
                         if (methodName.equals("getPackageInfo") && args != null && args.length > 0) {
                             String pkg = (String) args[0];
                             if (pkg != null && pkg.contains("com.google.android.gms")) {
