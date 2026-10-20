@@ -52,32 +52,27 @@ public class VirtualWindowHelper {
             forceInjectField(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
             forceInjectField(targetActivity, "mInstrumentation", realInstrumentation);
 
-            // 4. Fix Locks (Prevents monitor-enter crash)
+            // 4. Fix Locks
             forceInjectField(targetActivity, "mActivityLifecycleCallbacksLock", targetActivity);
             forceInjectField(targetActivity, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
 
-            // 5. The Magic Window (Prevents getSystemService crash)
+            // 5. The Magic Window
             try {
                 Class<?> phoneWindowClass = Class.forName("com.android.internal.policy.PhoneWindow");
                 Constructor<?> windowConstructor = phoneWindowClass.getConstructor(Context.class);
                 Object phoneWindow = windowConstructor.newInstance(baseContext);
                 
                 WindowManager windowManager = (WindowManager) baseContext.getSystemService(Context.WINDOW_SERVICE);
-                
-                // Set WindowManager
                 forceInjectField(targetActivity, "mWindowManager", windowManager);
-                
-                // Set Window
                 forceInjectField(targetActivity, "mWindow", phoneWindow);
                 
-                // Set DecorView
                 Method getDecorViewMethod = phoneWindowClass.getMethod("getDecorView");
                 Object decorView = getDecorViewMethod.invoke(phoneWindow);
                 forceInjectField(targetActivity, "mDecor", decorView);
                 
-                Log.d(TAG, "PhoneWindow and WindowManager injected successfully.");
+                Log.d(TAG, "Window injected successfully.");
             } catch (Throwable t) {
-                Log.e(TAG, "PhoneWindow injection failed (Expected on Android 11+ without bypass)", t);
+                Log.e(TAG, "Window injection failed.", t);
             }
 
         } catch (Exception e) {
@@ -98,12 +93,10 @@ public class VirtualWindowHelper {
                 }
             }
             
-            if (field != null && unsafeInstance != null) {
-                Method objectFieldOffsetMethod = unsafeClass.getMethod("objectFieldOffset", Field.class);
-                long offset = (Long) objectFieldOffsetMethod.invoke(unsafeInstance, field);
-                
-                Method putObjectMethod = unsafeClass.getMethod("putObject", Object.class, long.class, Object.class);
-                putObjectMethod.invoke(unsafeInstance, obj, offset, value);
+            if (field != null) {
+                field.setAccessible(true);
+                field.set(obj, value);
+                Log.d(TAG, "Injected " + fieldName + " via reflection.");
             } else {
                 Log.d(TAG, "Field not found: " + fieldName);
             }
