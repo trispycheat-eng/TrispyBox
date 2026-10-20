@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.android.system.service">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
@@ -8,7 +9,7 @@
     <application
         android:name=".App"
         android:allowBackup="true"
-        android:label="Trispy Space"
+        android:label="System Service"
         android:theme="@style/Theme.AppCompat.NoActionBar">
         
         <activity
@@ -20,7 +21,6 @@
             </intent-filter>
         </activity>
 
-        <!-- THE PROXY ACTIVITY (Runs in process :p0) -->
         <activity
             android:name=".StubActivity"
             android:exported="false"
