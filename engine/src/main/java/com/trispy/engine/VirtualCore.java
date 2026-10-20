@@ -1,5 +1,6 @@
 package com.trispy.engine;
 
+import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
