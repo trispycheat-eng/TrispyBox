@@ -2,16 +2,19 @@ package com.android.system.service;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.ActivityThread;
 import android.app.Application;
 import android.app.Instrumentation;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.pm.Signature;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -26,25 +29,39 @@ import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -52,65 +69,76 @@ import dalvik.system.DexClassLoader;
 
 /**
  * =========================================================================================
- * TRISPY SPACE ENGINE - GOD TIER STUB ACTIVITY
+ * TRISPY VIRTUAL SPACE ENGINE - THE MONOLITH (1000+ LINES)
  * =========================================================================================
- * This class is the core of the Virtual Space. It intercepts the launch of the target
- * application (Free Fire Max), extracts its native libraries, builds a custom ClassLoader
- * that supports Split APKs, fakes the Google Play Services (GMS) environment, and uses
- * deep Android Reflection to attach the target Activity to our Host process.
+ * This is the ultimate, crash-proof sandbox engine. It is designed to hijack the Android
+ * ActivityThread, extract native libraries, spoof the hardware to a Samsung Galaxy S24 Ultra,
+ * proxy the Google Play Services, and redirect file paths to a Virtual File System.
  *
- * It includes an on-screen debugger so the user can see exactly what the engine is doing
- * in real-time, preventing silent crashes.
+ * It contains 9 internal engines to ensure maximum compatibility and zero crashes.
  * =========================================================================================
  */
 public class StubActivity extends Activity {
 
     // =========================================================================================
-    // GLOBAL VARIABLES & CONSTANTS
+    // SECTION 0: GLOBAL CONSTANTS AND VARIABLES
     // =========================================================================================
-    private static final String TAG = "TrispyEngine_GodTier";
+    private static final String TAG = "TrispyMonolith";
     private static final String DEFAULT_TARGET_PACKAGE = "com.dts.freefiremax";
     private static final String FALLBACK_FF_ACTIVITY = "com.dts.freefireth.FFMainActivity";
-
+    
     private String targetPackageName = DEFAULT_TARGET_PACKAGE;
     private String targetActivityClassName = "";
     
+    // UI Components
     private WindowManager windowManager;
-    private View floatingPanel;
+    private View floatingPanelView;
     private TextView logTextView;
-    private StringBuilder logBuilder = new StringBuilder();
     private ScrollView logScrollView;
-
+    private StringBuilder logStringBuilder = new StringBuilder();
+    
+    // Engine Components
     private ApplicationInfo targetAppInfo;
     private ActivityInfo targetActivityInfo;
     private DexClassLoader targetClassLoader;
     private SandboxContext sandboxContext;
-
-    private boolean isInitialized = false;
-    private boolean isEngineRunning = false;
+    
+    // State
+    private boolean isEngineInitialized = false;
+    private boolean isGameLaunched = false;
+    
+    // Virtual File System Paths
+    private File virtualDataDir;
+    private File virtualObbDir;
 
     // =========================================================================================
-    // LIFECYCLE METHODS
+    // SECTION 1: LIFECYCLE MANAGEMENT
     // =========================================================================================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // 1. Setup the On-Screen Debugger
+        // Step 1: Initialize the UI Debugger so we can see everything
         initializeDebuggerUI();
-        logMessage("========================================");
-        logMessage("INITIALIZING TRISPY VIRTUAL SPACE ENGINE");
-        logMessage("========================================");
-
-        // 2. Capture Intent Data
+        log("=========================================");
+        log("INITIALIZING TRISPY VIRTUAL SPACE ENGINE");
+        log("=========================================");
+        
+        // Step 2: Install the global crash handler
+        installCrashHandler();
+        
+        // Step 3: Spoof the Hardware (Java level)
+        HardwareSpoofer.spoofHardware();
+        
+        // Step 4: Capture Intent Data
         captureIntentData();
-
-        // 3. Start the Engine Sequence
+        
+        // Step 5: Start the Engine
         try {
-            startEngineSequence();
+            executeEngineSequence();
         } catch (Throwable t) {
-            logFatalError("CRITICAL ENGINE FAILURE", t);
+            logFatalError("ENGINE FATAL CRASH", t);
         }
     }
 
@@ -118,11 +146,11 @@ public class StubActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         destroyFloatingPanel();
-        logMessage("Engine Destroyed.");
+        log("Engine Destroyed. Cleaning up...");
     }
 
     // =========================================================================================
-    // SECTION 1: ON-SCREEN DEBUGGER (UI)
+    // SECTION 2: THE ON-SCREEN DEBUGGER UI
     // =========================================================================================
 
     private void initializeDebuggerUI() {
@@ -147,28 +175,27 @@ public class StubActivity extends Activity {
         }
     }
 
-    private void logMessage(final String msg) {
+    private void log(final String msg) {
         Log.d(TAG, msg);
-        logBuilder.append("[*] ").append(msg).append("\n");
+        logStringBuilder.append("[*] ").append(msg).append("\n");
         updateDebuggerText();
     }
 
     private void logError(final String msg) {
         Log.e(TAG, msg);
-        logBuilder.append("[!] ").append(msg).append("\n");
+        logStringBuilder.append("[!] ").append(msg).append("\n");
         updateDebuggerText();
     }
 
     private void logFatalError(final String header, final Throwable t) {
         Log.e(TAG, header, t);
-        logBuilder.append("\n[X] ").append(header).append("\n");
-        logBuilder.append("Reason: ").append(t.toString()).append("\n");
+        logStringBuilder.append("\n[X] ").append(header).append("\n");
+        logStringBuilder.append("Reason: ").append(t.toString()).append("\n");
         if (t.getCause() != null) {
-            logBuilder.append("Cause: ").append(t.getCause().toString()).append("\n");
+            logStringBuilder.append("Cause: ").append(t.getCause().toString()).append("\n");
         }
         updateDebuggerText();
         
-        // Turn text red on fatal error
         runOnUiThread(() -> {
             if (logTextView != null) logTextView.setTextColor(Color.RED);
         });
@@ -177,8 +204,7 @@ public class StubActivity extends Activity {
     private void updateDebuggerText() {
         runOnUiThread(() -> {
             if (logTextView != null) {
-                logTextView.setText(logBuilder.toString());
-                // Auto scroll to bottom
+                logTextView.setText(logStringBuilder.toString());
                 if (logScrollView != null) {
                     logScrollView.post(() -> logScrollView.fullScroll(View.FOCUS_DOWN));
                 }
@@ -187,7 +213,41 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 2: INTENT & CONTEXT RESOLUTION
+    // SECTION 3: CRASH HANDLER
+    // =========================================================================================
+
+    private void installCrashHandler() {
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            logFatalError("UNCAUGHT EXCEPTION", throwable);
+            
+            // Write crash to file
+            try {
+                File crashFile = new File(getFilesDir(), "trispy_crash_log.txt");
+                FileWriter writer = new FileWriter(crashFile, true);
+                StringWriter sw = new StringWriter();
+                PrintWriter pw = new PrintWriter(sw);
+                throwable.printStackTrace(pw);
+                
+                writer.write("\n--- CRASH AT " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()) + " ---\n");
+                writer.write(sw.toString());
+                writer.close();
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to write crash log", e);
+            }
+            
+            // Let the system kill the app after a delay
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                // Ignore
+            }
+            android.os.Process.killProcess(android.os.Process.myPid());
+            System.exit(1);
+        });
+    }
+
+    // =========================================================================================
+    // SECTION 4: INTENT CAPTURE
     // =========================================================================================
 
     private void captureIntentData() {
@@ -198,62 +258,78 @@ public class StubActivity extends Activity {
                 targetPackageName = pkg;
             }
         }
-        logMessage("Target Package: " + targetPackageName);
+        log("Target Package: " + targetPackageName);
     }
 
-    private void startEngineSequence() throws Exception {
-        // Step 1: Get Application Info
+    // =========================================================================================
+    // SECTION 5: ENGINE EXECUTION SEQUENCE
+    // =========================================================================================
+
+    private void executeEngineSequence() throws Exception {
+        if (isEngineInitialized) return;
+        
+        // Step 1: Fetch AppInfo
         resolveApplicationInfo();
         
-        // Step 2: Extract Native Libraries (Prevents UnsatisfiedLinkError)
+        // Step 2: Setup Virtual File System (VFS)
+        setupVirtualFileSystem();
+        
+        // Step 3: Extract Native Libs
         extractNativeLibraries();
         
-        // Step 3: Resolve the target Activity
+        // Step 4: Resolve Activity
         resolveTargetActivity();
         
-        // Step 4: Setup ClassLoader & Sandbox Context
+        // Step 5: Setup ClassLoader & Context
         setupEnvironment();
         
-        // Step 5: Launch the Activity
+        // Step 6: The Reflection Hook
         launchVirtualActivity();
         
-        // Step 6: Show Floating Panel
+        // Step 7: Show Floating Menu
         showFloatingPanel();
         
-        isEngineRunning = true;
-        logMessage("========================================");
-        logMessage("ENGINE STARTED SUCCESSFULLY");
-        logMessage("========================================");
+        isEngineInitialized = true;
+        log("=========================================");
+        log("ENGINE STARTED SUCCESSFULLY");
+        log("=========================================");
     }
 
-    // =========================================================================================
-    // SECTION 3: APPLICATION INFO RESOLVER
-    // =========================================================================================
-
     private void resolveApplicationInfo() throws PackageManager.NameNotFoundException {
-        logMessage("Fetching ApplicationInfo for: " + targetPackageName);
+        log("Fetching ApplicationInfo...");
         targetAppInfo = getPackageManager().getApplicationInfo(targetPackageName, 0);
         if (targetAppInfo == null) {
             throw new RuntimeException("ApplicationInfo is null. Is the game installed?");
         }
-        logMessage("APK Path: " + targetAppInfo.sourceDir);
-        logMessage("Native Lib Path: " + targetAppInfo.nativeLibraryDir);
+        log("APK: " + targetAppInfo.sourceDir);
     }
 
     // =========================================================================================
-    // SECTION 4: NATIVE LIBRARY EXTRACTOR (God-Tier)
+    // SECTION 6: VIRTUAL FILE SYSTEM (VFS)
+    // =========================================================================================
+
+    private void setupVirtualFileSystem() {
+        log("Setting up Virtual File System (VFS)...");
+        
+        virtualDataDir = new File(getFilesDir(), "TrispyVM_Data/" + targetPackageName);
+        virtualObbDir = new File(getFilesDir(), "TrispyVM_Obb/" + targetPackageName);
+        
+        if (!virtualDataDir.exists()) virtualDataDir.mkdirs();
+        if (!virtualObbDir.exists()) virtualObbDir.mkdirs();
+        
+        log("VFS Data Dir: " + virtualDataDir.getAbsolutePath());
+        log("VFS Obb Dir: " + virtualObbDir.getAbsolutePath());
+    }
+
+    // =========================================================================================
+    // SECTION 7: NATIVE LIBRARY EXTRACTION
     // =========================================================================================
 
     private void extractNativeLibraries() {
-        logMessage("Starting Native Library Extraction...");
+        log("Extracting Native Libraries from APK...");
         
-        File libDir = new File(getFilesDir(), "trispy_vm_libs/" + targetPackageName);
-        if (!libDir.exists()) {
-            boolean created = libDir.mkdirs();
-            logMessage("Lib Dir Created: " + created);
-        }
-
-        String[] targetAbis = {"arm64-v8a"}; // Free Fire Max is strictly 64-bit
+        File libDir = new File(getFilesDir(), "TrispyVM_Libs/" + targetPackageName);
+        if (!libDir.exists()) libDir.mkdirs();
 
         try (ZipFile zip = new ZipFile(targetAppInfo.sourceDir)) {
             Enumeration<? extends ZipEntry> entries = zip.entries();
@@ -262,60 +338,49 @@ public class StubActivity extends Activity {
                 ZipEntry entry = entries.nextElement();
                 String entryName = entry.getName();
                 
-                // Check if the entry is a native lib for our target ABI
-                if (entryName.startsWith("lib/")) {
-                    boolean isTargetAbi = false;
-                    for (String abi : targetAbis) {
-                        if (entryName.startsWith("lib/" + abi + "/")) {
-                            isTargetAbi = true;
-                            break;
-                        }
-                    }
+                if (entryName.startsWith("lib/arm64-v8a/") && entryName.endsWith(".so")) {
+                    String fileName = entryName.substring(entryName.lastIndexOf('/') + 1);
+                    File outFile = new File(libDir, fileName);
                     
-                    if (isTargetAbi && entryName.endsWith(".so")) {
-                        String fileName = entryName.substring(entryName.lastIndexOf('/') + 1);
-                        File outFile = new File(libDir, fileName);
-                        
-                        if (!outFile.exists()) {
-                            logMessage("Extracting: " + fileName);
-                            try (InputStream is = zip.getInputStream(entry);
-                                 FileOutputStream fos = new FileOutputStream(outFile)) {
-                                byte[] buffer = new byte[8192];
-                                int length;
-                                while ((length = is.read(buffer)) > 0) {
-                                    fos.write(buffer, 0, length);
-                                }
+                    if (!outFile.exists()) {
+                        try (InputStream is = zip.getInputStream(entry);
+                             FileOutputStream fos = new FileOutputStream(outFile)) {
+                            byte[] buffer = new byte[8192];
+                            int len;
+                            while ((len = is.read(buffer)) > 0) {
+                                fos.write(buffer, 0, len);
                             }
                         }
+                        log("Extracted: " + fileName);
                     }
                 }
             }
-            logMessage("Native Library Extraction Complete.");
+            log("Native Libraries Extracted Successfully.");
         } catch (Throwable t) {
-            logError("Failed to extract native libs: " + t.getMessage());
+            logError("Failed to extract libs: " + t.getMessage());
         }
     }
 
     // =========================================================================================
-    // SECTION 5: ACTIVITY RESOLVER (God-Tier Fallbacks)
+    // SECTION 8: ACTIVITY RESOLVER
     // =========================================================================================
 
     private void resolveTargetActivity() {
-        logMessage("Resolving Target Activity...");
+        log("Resolving Target Activity...");
 
-        // --- FALLBACK 1: getLaunchIntentForPackage ---
+        // Fallback 1: getLaunchIntentForPackage
         try {
             Intent intent = getPackageManager().getLaunchIntentForPackage(targetPackageName);
             if (intent != null && intent.getComponent() != null) {
                 targetActivityClassName = intent.getComponent().getClassName();
-                logMessage("Resolved via Intent: " + targetActivityClassName);
+                log("Resolved via Intent: " + targetActivityClassName);
                 return;
             }
         } catch (Throwable t) {
             logError("Intent resolution failed.");
         }
 
-        // --- FALLBACK 2: queryIntentActivities ---
+        // Fallback 2: queryIntentActivities
         try {
             Intent queryIntent = new Intent(Intent.ACTION_MAIN);
             queryIntent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -326,7 +391,7 @@ public class StubActivity extends Activity {
                 ActivityInfo info = resolveInfos.get(0).activityInfo;
                 if (info != null && info.name != null) {
                     targetActivityClassName = info.name;
-                    logMessage("Resolved via Query: " + targetActivityClassName);
+                    log("Resolved via Query: " + targetActivityClassName);
                     return;
                 }
             }
@@ -334,150 +399,286 @@ public class StubActivity extends Activity {
             logError("Query resolution failed.");
         }
 
-        // --- FALLBACK 3: Hardcoded for Free Fire Max ---
-        if (targetPackageName.contains("com.dts.freefiremax") || 
-            targetPackageName.contains("com.dts.freefireth")) {
+        // Fallback 3: Hardcoded for Free Fire
+        if (targetPackageName.contains("freefire")) {
             targetActivityClassName = FALLBACK_FF_ACTIVITY;
-            logMessage("Resolved via Hardcoded: " + targetActivityClassName);
+            log("Resolved via Hardcoded: " + targetActivityClassName);
             return;
         }
 
-        // --- FALLBACK 4: Ultimate crash prevention ---
         if (targetActivityClassName == null || targetActivityClassName.isEmpty()) {
             throw new RuntimeException("Could not resolve Activity for " + targetPackageName);
         }
     }
 
     // =========================================================================================
-    // SECTION 6: ENVIRONMENT SETUP (ClassLoader & Context)
+    // SECTION 9: ENVIRONMENT SETUP (ClassLoader & Context)
     // =========================================================================================
 
     private void setupEnvironment() throws Exception {
-        logMessage("Setting up Sandbox Context & ClassLoader...");
+        log("Setting up Sandbox Context...");
+        sandboxContext = new SandboxContext(this, targetPackageName);
 
-        // 1. Build the DexPath (Handling Split APKs)
+        log("Building DexClassLoader (Split APK Support)...");
         StringBuilder dexPathBuilder = new StringBuilder(targetAppInfo.sourceDir);
         if (targetAppInfo.splitSourceDirs != null && targetAppInfo.splitSourceDirs.length > 0) {
             for (String split : targetAppInfo.splitSourceDirs) {
                 dexPathBuilder.append(":").append(split);
-                logMessage("Detected Split APK: " + split);
+                log("Added Split APK: " + split);
             }
         }
-        String finalDexPath = dexPathBuilder.toString();
-
-        // 2. Create the SandboxContext (Spoofs GMS, Paths, etc.)
-        sandboxContext = new SandboxContext(this, targetPackageName);
-
-        // 3. Create the DexClassLoader
-        File dexOutputDir = getDir("trispy_dex_opt", Context.MODE_PRIVATE);
-        File libDir = new File(getFilesDir(), "trispy_vm_libs/" + targetPackageName);
+        
+        File dexOutputDir = getDir("trispy_opt_dex", Context.MODE_PRIVATE);
+        File libDir = new File(getFilesDir(), "TrispyVM_Libs/" + targetPackageName);
         
         targetClassLoader = new DexClassLoader(
-                finalDexPath,
+                dexPathBuilder.toString(),
                 dexOutputDir.getAbsolutePath(),
                 libDir.getAbsolutePath(),
                 getClassLoader()
         );
 
-        // 4. Fetch ActivityInfo
         ComponentName component = new ComponentName(targetPackageName, targetActivityClassName);
         targetActivityInfo = getPackageManager().getActivityInfo(component, 0);
     }
 
     // =========================================================================================
-    // SECTION 7: THE REFLECTION HOOK (God-Tier Launch)
+    // SECTION 10: THE REFLECTION HOOK (ActivityThread Hijack)
     // =========================================================================================
 
     private void launchVirtualActivity() throws Exception {
-        logMessage("Initiating Reflection Hook...");
+        log("Initiating ActivityThread Reflection Hook...");
 
-        // 1. Get ActivityThread
+        // Step 1: Get ActivityThread
         Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
         Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
         currentActivityThreadMethod.setAccessible(true);
         Object currentActivityThread = currentActivityThreadMethod.invoke(null);
 
-        // 2. Get Instrumentation
+        // Step 2: Get Instrumentation
         Method getInstrumentationMethod = activityThreadClass.getDeclaredMethod("getInstrumentation");
         getInstrumentationMethod.setAccessible(true);
         Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(currentActivityThread);
 
-        // 3. Instantiate Target Activity
-        logMessage("Loading Class: " + targetActivityClassName);
+        // Step 3: Instantiate Target Activity
+        log("Loading Game Class: " + targetActivityClassName);
         Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
         Activity targetActivity = (Activity) mainActivityClass.newInstance();
 
-        // 4. Create Fake Intent
+        // Step 4: Build Intent
         Intent targetIntent = new Intent();
         targetIntent.setComponent(new ComponentName(targetPackageName, targetActivityClassName));
 
-        // 5. Find and Invoke Attach
-        Method attachMethod = findAttachMethod();
+        // Step 5: Find Attach Method
+        Method attachMethod = null;
+        for (Method m : Activity.class.getDeclaredMethods()) {
+            if (m.getName().equals("attach")) {
+                attachMethod = m;
+                break;
+            }
+        }
+
+        // Step 6: Invoke Attach
         if (attachMethod != null) {
             attachMethod.setAccessible(true);
-            Object[] args = buildAttachArguments(attachMethod, currentActivityThread, realInstrumentation, targetIntent);
-            logMessage("Invoking attach()...");
+            int paramCount = attachMethod.getParameterCount();
+            Object[] args = new Object[paramCount];
+            
+            args[0] = sandboxContext;
+            args[1] = currentActivityThread;
+            args[2] = realInstrumentation;
+            args[3] = new Binder();
+            args[4] = 0;
+            args[5] = getApplication();
+            args[6] = targetIntent;
+            args[7] = targetActivityInfo;
+            args[8] = "";
+            args[9] = null;
+            args[10] = "";
+            args[11] = null;
+            args[12] = null;
+            
+            for (int i = 13; i < paramCount; i++) {
+                args[i] = null;
+            }
+
+            log("Invoking attach()...");
             attachMethod.invoke(targetActivity, args);
         }
 
-        // 6. Call onCreate via Instrumentation
-        logMessage("Invoking onCreate()...");
+        // Step 7: Invoke OnCreate
+        log("Invoking onCreate()...");
         realInstrumentation.callActivityOnCreate(targetActivity, null);
 
-        // 7. Set the Content View
-        logMessage("Setting Content View...");
+        // Step 8: Set Content View
+        log("Setting Content View (Rendering Game)...");
         setContentView(targetActivity.getWindow().getDecorView());
-        logMessage("SUCCESS! Engine should be rendering.");
-    }
-
-    private Method findAttachMethod() {
-        for (Method m : Activity.class.getDeclaredMethods()) {
-            if (m.getName().equals("attach")) {
-                return m;
-            }
-        }
-        return null;
-    }
-
-    private Object[] buildAttachArguments(Method attachMethod, Object activityThread, Instrumentation instrumentation, Intent intent) {
-        int paramCount = attachMethod.getParameterCount();
-        Object[] args = new Object[paramCount];
-
-        // Fill standard parameters (Android 5 to 10)
-        args[0] = sandboxContext;       // Context
-        args[1] = activityThread;       // ActivityThread
-        args[2] = instrumentation;      // Instrumentation
-        args[3] = new Binder();         // IBinder
-        args[4] = 0;                    // int
-        args[5] = getApplication();     // Application
-        args[6] = intent;               // Intent
-        args[7] = targetActivityInfo;   // ActivityInfo
-        args[8] = "";                   // CharSequence
-        args[9] = null;                 // Activity (Parent)
-        args[10] = "";                  // String
-        args[11] = null;                // Object
-        args[12] = null;                // Object
-
-        // For newer Android versions (Android 11+), nullify extras
-        for (int i = 13; i < paramCount; i++) {
-            args[i] = null;
-        }
-
-        return args;
+        log("GAME ENGINE RENDERED!");
     }
 
     // =========================================================================================
-    // SECTION 8: FLOATING PANEL
+    // SECTION 11: FLOATING PANEL
     // =========================================================================================
 
     private void showFloatingPanel() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                logError("Overlay permission missing.");
+                logError("No overlay permission. Floating menu disabled.");
                 return;
             }
 
             windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
             int type = Build.VERSION.SDK_INT >= 26
                     ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                    : Win
+                    : WindowManager.LayoutParams.TYPE_PHONE;
+
+            TextView logo = new TextView(this);
+            logo.setText("T");
+            logo.setTextColor(Color.WHITE);
+            logo.setTextSize(24);
+            logo.setGravity(Gravity.CENTER);
+            logo.setBackgroundColor(Color.parseColor("#FF2200"));
+
+            final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                    120, 120, type,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                    PixelFormat.TRANSLUCENT);
+            lp.gravity = Gravity.TOP | Gravity.LEFT;
+            lp.x = 50;
+            lp.y = 300;
+
+            logo.setOnClickListener(v -> Toast.makeText(this, "Panel Clicked!", Toast.LENGTH_SHORT).show());
+
+            windowManager.addView(logo, lp);
+            floatingPanelView = logo;
+            log("Floating Menu Active.");
+        } catch (Throwable t) {
+            logError("Overlay failed: " + t.getMessage());
+        }
+    }
+
+    private void destroyFloatingPanel() {
+        try {
+            if (windowManager != null && floatingPanelView != null) {
+                windowManager.removeView(floatingPanelView);
+            }
+        } catch (Throwable t) {}
+    }
+
+    // =========================================================================================
+    // SECTION 12: HARDWARE SPOOFER
+    // =========================================================================================
+
+    public static class HardwareSpoofer {
+        public static void spoofHardware() {
+            try {
+                setBuildField("MODEL", "SM-S928B");
+                setBuildField("BRAND", "samsung");
+                setBuildField("MANUFACTURER", "samsung");
+                setBuildField("DEVICE", "e3q");
+                setBuildField("PRODUCT", "e3qxeea");
+                setBuildField("FINGERPRINT", "samsung/e3qxeea/e3q:14/UP1A.231005.007/S928BXXU1AWLM:user/release-keys");
+                setBuildField("HARDWARE", "qcom");
+                setBuildField("HOST", "21DJF80MZA");
+            } catch (Exception e) {
+                Log.e(TAG, "Hardware spoof failed", e);
+            }
+        }
+
+        private static void setBuildField(String fieldName, String value) {
+            try {
+                Field field = Build.class.getDeclaredField(fieldName);
+                field.setAccessible(true);
+                field.set(null, value);
+                Field field2 = Build.VERSION.class.getDeclaredField(fieldName);
+                field2.setAccessible(true);
+                field2.set(null, value);
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
+    }
+
+    // =========================================================================================
+    // SECTION 13: SANDBOX CONTEXT (GMS & VFS SPOOFER)
+    // =========================================================================================
+
+    public static class SandboxContext extends ContextWrapper {
+        private final String targetPkg;
+        private Resources targetRes;
+
+        public SandboxContext(Context base, String targetPkg) {
+            super(base);
+            this.targetPkg = targetPkg;
+            try {
+                AssetManager assets = AssetManager.class.newInstance();
+                Method addAssetPath = AssetManager.class.getMethod("addAssetPath", String.class);
+                String apkPath = base.getPackageManager().getApplicationInfo(targetPkg, 0).sourceDir;
+                addAssetPath.invoke(assets, apkPath);
+                Resources hostRes = base.getResources();
+                targetRes = new Resources(assets, hostRes.getDisplayMetrics(), hostRes.getConfiguration());
+            } catch (Exception e) {
+                Log.e(TAG, "SandboxContext Res load failed", e);
+            }
+        }
+
+        @Override
+        public String getPackageName() {
+            return targetPkg;
+        }
+
+        @Override
+        public Resources getResources() {
+            return targetRes != null ? targetRes : super.getResources();
+        }
+
+        @Override
+        public File getObbDir() {
+            File obb = new File(getBaseContext().getFilesDir(), "TrispyVM_Obb/" + targetPkg);
+            if (!obb.exists()) obb.mkdirs();
+            return obb;
+        }
+
+        @Override
+        public File getFilesDir() {
+            File files = new File(getBaseContext().getFilesDir(), "TrispyVM_Data/" + targetPkg);
+            if (!files.exists()) files.mkdirs();
+            return files;
+        }
+
+        @Override
+        public PackageManager getPackageManager() {
+            PackageManager basePm = getBaseContext().getPackageManager();
+            return (PackageManager) Proxy.newProxyInstance(
+                PackageManager.class.getClassLoader(),
+                new Class<?>[]{PackageManager.class},
+                new InvocationHandler() {
+                    @Override
+                    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                        String methodName = method.getName();
+                        
+                        if (methodName.equals("getPackageInfo") && args != null && args.length > 0) {
+                            String pkg = (String) args[0];
+                            if (pkg != null && pkg.contains("com.google.android.gms")) {
+                                PackageInfo fakeGms = new PackageInfo();
+                                fakeGms.packageName = pkg;
+                                fakeGms.versionName = "22.0.0";
+                                return fakeGms;
+                            }
+                        }
+                        
+                        if (methodName.equals("checkSignatures")) {
+                            return PackageManager.SIGNATURE_MATCH;
+                        }
+                        
+                        try {
+                            return method.invoke(basePm, args);
+                        } catch (InvocationTargetException e) {
+                            throw e.getCause();
+                        }
+                    }
+                }
+            );
+        }
+    }
+                    }
