@@ -54,6 +54,9 @@ public class MainActivity extends AppCompatActivity {
         Button settingsBtn = findViewById(R.id.btn_settings);
         settingsBtn.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
 
+        Button filesBtn = findViewById(R.id.btn_files);
+        filesBtn.setOnClickListener(v -> startActivity(new Intent(this, FileManagerActivity.class)));
+
         FloatingActionButton fabAdd = findViewById(R.id.fab_add);
         fabAdd.setOnClickListener(v -> {
             Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
@@ -81,7 +84,26 @@ public class MainActivity extends AppCompatActivity {
         }
         
         if (requestCode == 1001 && resultCode == RESULT_OK && data != null) {
-            // ... (File import logic remains the same) ...
+            Uri fileUri = data.getData();
+            if (fileUri != null) {
+                try {
+                    File vmDir = new File(getFilesDir(), "TrispyVM/Apps");
+                    if (!vmDir.exists()) vmDir.mkdirs();
+                    File destFile = new File(vmDir, "imported_app.apk");
+                    InputStream is = getContentResolver().openInputStream(fileUri);
+                    FileOutputStream fos = new FileOutputStream(destFile);
+                    byte[] buffer = new byte[1024];
+                    int len;
+                    while ((len = is.read(buffer)) > 0) {
+                        fos.write(buffer, 0, len);
+                    }
+                    fos.close();
+                    is.close();
+                    Toast.makeText(this, "File added to VM!", Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    Toast.makeText(this, "Failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            }
         }
     }
 
