@@ -488,29 +488,50 @@ public class StubActivity extends Activity {
             attachMethod.invoke(targetActivity, args);
         }
 
-        // --- THE REAL FIX: INJECT INTERNAL LISTS ---
         if (isUnsafeInitialized) {
             try {
-                log("Injecting critical metadata & lists via Unsafe...");
+                log("Bypassing Application Lifecycle Crash...");
                 
+                // Create a dummy Application that does nothing to bypass the crash
+                Application dummyApp = new Application() {
+                    @Override public void dispatchActivityPreCreated(Activity activity, Bundle savedInstanceState) {}
+                    @Override public void dispatchActivityCreated(Activity activity, Bundle savedInstanceState) {}
+                    @Override public void dispatchActivityStarted(Activity activity) {}
+                    @Override public void dispatchActivityResumed(Activity activity) {}
+                    @Override public void dispatchActivityPaused(Activity activity) {}
+                    @Override public void dispatchActivityStopped(Activity activity) {}
+                    @Override public void dispatchActivitySaveInstanceState(Activity activity, Bundle outState) {}
+                    @Override public void dispatchActivityPostCreated(Activity activity, Bundle savedInstanceState) {}
+                    @Override public void dispatchActivityPostStarted(Activity activity) {}
+                    @Override public void dispatchActivityPostResumed(Activity activity) {}
+                    @Override public void dispatchActivityPrePaused(Activity activity) {}
+                    @Override public void dispatchActivityPreStopped(Activity activity) {}
+                    @Override public void dispatchActivityPreSaveInstanceState(Activity activity, Bundle outState) {}
+                    @Override public void dispatchActivityPreDestroyed(Activity activity) {}
+                    @Override public void dispatchActivityDestroyed(Activity activity) {}
+                    @Override public void dispatchActivityPostPaused(Activity activity) {}
+                    @Override public void dispatchActivityPostStopped(Activity activity) {}
+                    @Override public void dispatchActivityPostSaveInstanceState(Activity activity, Bundle outState) {}
+                    @Override public void dispatchActivityPostDestroyed(Activity activity) {}
+                };
+                
+                // Inject Dummy App and List
+                injectFieldUnsafe(targetActivity, "mApplication", dummyApp);
+                injectFieldUnsafe(targetActivity, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
+                
+                // Inject Metadata
                 injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
                 injectFieldUnsafe(targetActivity, "mComponent", componentName);
                 injectFieldUnsafe(targetActivity, "mCallingActivity", componentName);
                 injectFieldUnsafe(targetActivity, "mCallingPackage", targetPackageName);
                 
-                injectFieldUnsafe(targetActivity, "mApplication", getApplication());
+                // Inject Threads
                 injectFieldUnsafe(targetActivity, "mBase", sandboxContext);
-                
                 injectFieldUnsafe(targetActivity, "mUiThread", Thread.currentThread());
                 injectFieldUnsafe(targetActivity, "mMainThread", currentActivityThread);
                 injectFieldUnsafe(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
                 
-                // FIX FOR MONITOR-ENTER CRASH
-                injectFieldUnsafe(targetActivity, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
-                injectFieldUnsafe(targetActivity, "mManagedCursors", new ArrayList<Object>());
-                injectFieldUnsafe(targetActivity, "mFragments", null); 
-                
-                log("Metadata and lists injection complete.");
+                log("Lifecycle bypass injected successfully.");
             } catch (Exception e) {
                 log("Unsafe injection failed: " + e.getMessage());
             }
@@ -518,6 +539,11 @@ public class StubActivity extends Activity {
 
         log("Invoking onCreate()...");
         realInstrumentation.callActivityOnCreate(targetActivity, null);
+
+        // Restore the real Application after the crash window has passed
+        if (isUnsafeInitialized) {
+            injectFieldUnsafe(targetActivity, "mApplication", getApplication());
+        }
 
         log("Setting Content View...");
         setContentView(targetActivity.getWindow().getDecorView());
