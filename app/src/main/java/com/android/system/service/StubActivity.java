@@ -1,25 +1,21 @@
 package com.android.system.service;
 
-import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.appcompat.app.AppCompatActivity;
 
-public class StubActivity extends Activity {
+public class StubActivity extends AppCompatActivity {
     private WindowManager wm;
     private View logoBtn;
-    private static final int OVERLAY_REQ = 1002;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -27,7 +23,6 @@ public class StubActivity extends Activity {
         
         String targetPkg = getIntent().getStringExtra("TRISPY_TARGET_PKG");
         
-        // 1. Load the Trispy Native Panel (libcrypto.so)
         try {
             System.loadLibrary("crypto"); 
             Log.d("TrispySpace", "Panel Library Loaded!");
@@ -35,7 +30,6 @@ public class StubActivity extends Activity {
             Log.e("TrispySpace", "Failed to load panel: " + t.getMessage());
         }
 
-        // 2. Show the Green Screen
         TextView tv = new TextView(this);
         tv.setText("VIRTUAL SPACE ENGINE ACTIVE!\n\nPanel Loaded.\nFloating Icon should appear.");
         tv.setTextColor(Color.GREEN);
@@ -44,30 +38,7 @@ public class StubActivity extends Activity {
         tv.setBackgroundColor(Color.BLACK);
         setContentView(tv);
 
-        // 3. Check Overlay Permission & Show Icon
-        if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
-            try {
-                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + getPackageName()));
-                startActivityForResult(intent, OVERLAY_REQ);
-            } catch (Throwable t) {
-                Toast.makeText(this, "Overlay permission needed!", Toast.LENGTH_LONG).show();
-            }
-        } else {
-            showFloatingLogo();
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == OVERLAY_REQ) {
-            if (Build.VERSION.SDK_INT >= 23 && Settings.canDrawOverlays(this)) {
-                showFloatingLogo();
-            } else {
-                Toast.makeText(this, "Permission denied. Icon won't show.", Toast.LENGTH_LONG).show();
-            }
-        }
+        showFloatingLogo();
     }
 
     private void showFloatingLogo() {
@@ -100,6 +71,7 @@ public class StubActivity extends Activity {
             logoBtn = logo;
         } catch (Throwable t) {
             Log.e("TrispySpace", "Overlay failed: " + t.getMessage());
+            Toast.makeText(this, "Overlay Crash: " + t.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
