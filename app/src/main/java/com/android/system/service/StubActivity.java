@@ -91,6 +91,7 @@ public class StubActivity extends Activity {
         log("=========================================");
         
         installGlobalCrashHandler();
+        VirtualWindowHelper.initUnsafe();
         HardwareSpoofer.spoofHardware();
         captureIntentData();
         
@@ -237,15 +238,8 @@ public class StubActivity extends Activity {
         String stackTrace = sw.toString();
         
         String[] lines = stackTrace.split("\n");
-        for (int i = 0; i < Math.min(lines.length, 15); i++) {
+        for (int i = 0; i < Math.min(lines.length, 10); i++) {
             logStringBuilder.append(lines[i]).append("\n");
-        }
-
-        // Print the actual Cause if it's an InvocationTargetException
-        Throwable cause = t.getCause();
-        while (cause != null) {
-            logStringBuilder.append("\nCaused by: ").append(cause.toString()).append("\n");
-            cause = cause.getCause();
         }
 
         updateDebuggerText();
@@ -296,7 +290,6 @@ public class StubActivity extends Activity {
         resolveTargetActivity();
         setupEnvironment();
         
-        // THE FIX: Switch to UI thread before creating the Activity
         runOnUiThread(() -> {
             try {
                 launchVirtualActivity();
@@ -414,13 +407,7 @@ public class StubActivity extends Activity {
         Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(currentActivityThread);
 
         Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
-        
-        Activity targetActivity;
-        try {
-            targetActivity = (Activity) mainActivityClass.newInstance();
-        } catch (Throwable t) {
-            targetActivity = (Activity) mainActivityClass.newInstance();
-        }
+        Activity targetActivity = (Activity) mainActivityClass.newInstance();
 
         Intent targetIntent = new Intent(Intent.ACTION_MAIN);
         targetIntent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -457,26 +444,19 @@ public class StubActivity extends Activity {
             
             for (int i = 13; i < paramCount; i++) args[i] = null;
 
+            log("Invoking attach()...");
             attachMethod.invoke(targetActivity, args);
+        } else {
+            logError("Could not find attach() method!");
         }
 
         log("Injecting Bypass Environment...");
-        
-        Application dummyApp = (Application) Class.forName("sun.misc.Unsafe").getMethod("allocateInstance", Class.class).invoke(getUnsafeInstance(), Application.class);
-        
-        VirtualWindowHelper.forceInjectField(targetActivity, "mBase", sandboxContext);
-        VirtualWindowHelper.forceInjectField(targetActivity, "mApplication", dummyApp);
-        VirtualWindowHelper.forceInjectField(targetActivity, "mIntent", targetIntent);
-        VirtualWindowHelper.forceInjectField(targetActivity, "mComponent", componentName);
-        VirtualWindowHelper.forceInjectField(targetActivity, "mCallingActivity", componentName);
-        VirtualWindowHelper.forceInjectField(targetActivity, "mCallingPackage", targetPackageName);
-        VirtualWindowHelper.forceInjectField(targetActivity, "mUiThread", Thread.currentThread());
-        VirtualWindowHelper.forceInjectField(targetActivity, "mMainThread", currentActivityThread);
-        VirtualWindowHelper.forceInjectField(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
+        VirtualWindowHelper.injectEnvironment(
+                targetActivity, sandboxContext, targetIntent, componentName, 
+                targetPackageName, currentActivityThread, realInstrumentation
+        );
 
         RealmeBypass.inject(targetActivity);
-
-        // NOTE: We completely removed the PhoneWindow injection. Android's attach() creates it automatically.
 
         log("Invoking onCreate() directly...");
         
@@ -504,13 +484,6 @@ public class StubActivity extends Activity {
         
         isActivityLaunched = true;
         log("GAME ENGINE RENDERED!");
-    }
-
-    private Object getUnsafeInstance() throws Exception {
-        Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
-        Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
-        theUnsafe.setAccessible(true);
-        return theUnsafe.get(null);
     }
 
     private void showFloatingPanel() {
@@ -567,37 +540,4 @@ public class StubActivity extends Activity {
             try {
                 AssetManager assets = AssetManager.class.newInstance();
                 Method addAssetPath = AssetManager.class.getMethod("addAssetPath", String.class);
-                addAssetPath.invoke(assets, base.getPackageManager().getApplicationInfo(targetPkg, 0).sourceDir);
-                targetRes = new Resources(assets, base.getResources().getDisplayMetrics(), base.getResources().getConfiguration());
-            } catch (Exception e) {}
-        }
-
-        @Override public String getPackageName() { return targetPkg; }
-        @Override public Resources getResources() { return targetRes != null ? targetRes : super.getResources(); }
-        @Override public Context getApplicationContext() { return getBaseContext().getApplicationContext(); }
-
-        @Override
-        public PackageManager getPackageManager() {
-            PackageManager basePm = getBaseContext().getPackageManager();
-            return (PackageManager) Proxy.newProxyInstance(
-                PackageManager.class.getClassLoader(), new Class<?>[]{PackageManager.class},
-                (proxy, method, args) -> {
-                    if (method.getName().equals("getLaunchIntentForPackage") && args != null) {
-                        if (targetPkg.equals(args[0])) {
-                            Intent i = new Intent(Intent.ACTION_MAIN);
-                            i.addCategory(Intent.CATEGORY_LAUNCHER);
-                            i.setComponent(new ComponentName(targetPkg, "com.dts.freefireth.FFMainActivity"));
-                            return i;
-                        }
-                    }
-                    if (method.getName().equals("getPackageInfo") && args != null) {
-                        if (args[0] != null && args[0].toString().contains("gms")) {
-                            PackageInfo p = new PackageInfo(); p.packageName = args[0].toString(); p.versionName = "22.0.0"; return p;
-                        }
-                    }
-                    try { return method.invoke(basePm, args); } catch (InvocationTargetException e) { throw e.getCause(); }
-                }
-            );
-        }
-    }
-}
+                addAssetPath.invoke(
