@@ -70,9 +70,6 @@ public class StubActivity extends Activity {
     private DexClassLoader targetClassLoader;
     private SandboxContext sandboxContext;
     
-    private Object unsafeInstance;
-    private Class<?> unsafeClass;
-    
     private TextView logTextView;
     private ScrollView logScrollView;
     private StringBuilder logStringBuilder = new StringBuilder();
@@ -82,7 +79,6 @@ public class StubActivity extends Activity {
     
     private boolean isEngineInitialized = false;
     private boolean isActivityLaunched = false;
-    private boolean isUnsafeInitialized = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,7 +90,7 @@ public class StubActivity extends Activity {
         log("=========================================");
         
         installGlobalCrashHandler();
-        initUnsafe();
+        VirtualWindowHelper.initUnsafe(); // Initialize Unsafe in Helper
         HardwareSpoofer.spoofHardware();
         captureIntentData();
         
@@ -283,20 +279,6 @@ public class StubActivity extends Activity {
         log("Target Package: " + targetPackageName);
     }
 
-    private void initUnsafe() {
-        try {
-            unsafeClass = Class.forName("sun.misc.Unsafe");
-            Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
-            theUnsafe.setAccessible(true);
-            unsafeInstance = theUnsafe.get(null);
-            isUnsafeInitialized = true;
-            log("Unsafe initialized.");
-        } catch (Exception e) {
-            isUnsafeInitialized = false;
-            logError("Failed to init Unsafe: " + e.getMessage());
-        }
-    }
-
     private void executeEngineSequence() throws Exception {
         if (isEngineInitialized) return;
         
@@ -420,10 +402,13 @@ public class StubActivity extends Activity {
         Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
         
         Activity targetActivity;
-        if (isUnsafeInitialized) {
-            Method allocateInstanceMethod = unsafeClass.getMethod("allocateInstance", Class.class);
-            targetActivity = (Activity) allocateInstanceMethod.invoke(unsafeInstance, mainActivityClass);
-        } else {
+        try {
+            Method allocateInstanceMethod = Class.forName("sun.misc.Unsafe").getMethod("allocateInstance", Class.class);
+            Field theUnsafe = Class.forName("sun.misc.Unsafe").getDeclaredField("theUnsafe");
+            theUnsafe.setAccessible(true);
+            Object unsafe = theUnsafe.get(null);
+            targetActivity = (Activity) allocateInstanceMethod.invoke(unsafe, mainActivityClass);
+        } catch (Throwable t) {
             targetActivity = (Activity) mainActivityClass.newInstance();
         }
 
@@ -465,27 +450,14 @@ public class StubActivity extends Activity {
             attachMethod.invoke(targetActivity, args);
         }
 
-        if (isUnsafeInitialized) {
-            try {
-                log("Injecting Application context...");
-                Application dummyApp = (Application) unsafeClass.getMethod("allocateInstance", Class.class).invoke(unsafeInstance, Application.class);
-                
-                // Inject Dummy App
-                forceInjectField(targetActivity, "mApplication", dummyApp);
-                
-                // Inject Intent and Component
-                forceInjectField(targetActivity, "mIntent", targetIntent);
-                forceInjectField(targetActivity, "mComponent", componentName);
-                
-                log("Lifecycle bypass injected perfectly.");
-            } catch (Exception e) {
-                log("Unsafe injection failed: " + e.getMessage());
-            }
-        }
+        log("Injecting Context, Window, and Bypass Locks...");
+        VirtualWindowHelper.injectEnvironment(
+                targetActivity, sandboxContext, targetIntent, componentName, 
+                targetPackageName, currentActivityThread, realInstrumentation
+        );
 
-        log("Invoking onCreate() directly (Skipping Android internal locks)...");
+        log("Invoking onCreate() directly...");
         
-        // THE FIX: getDeclaredMethod instead of getMethod, and walk up the class hierarchy
         Method onCreateMethod = null;
         Class<?> clazz = targetActivity.getClass();
         while (clazz != null) {
@@ -504,42 +476,10 @@ public class StubActivity extends Activity {
             logError("Could not find onCreate method");
         }
 
-        // Restore real Application
-        if (isUnsafeInitialized) {
-            forceInjectField(targetActivity, "mApplication", getApplication());
-        }
-
         setContentView(targetActivity.getWindow().getDecorView());
         
         isActivityLaunched = true;
         log("GAME ENGINE RENDERED!");
-    }
-
-    private void forceInjectField(Object obj, String fieldName, Object value) {
-        try {
-            Class<?> clazz = obj.getClass();
-            Field field = null;
-            while (clazz != null) {
-                try {
-                    field = clazz.getDeclaredField(fieldName);
-                    break;
-                } catch (NoSuchFieldException e) {
-                    clazz = clazz.getSuperclass();
-                }
-            }
-            
-            if (field != null && unsafeInstance != null) {
-                Method objectFieldOffsetMethod = unsafeClass.getMethod("objectFieldOffset", Field.class);
-                long offset = (Long) objectFieldOffsetMethod.invoke(unsafeInstance, field);
-                
-                Method putObjectMethod = unsafeClass.getMethod("putObject", Object.class, long.class, Object.class);
-                putObjectMethod.invoke(unsafeInstance, obj, offset, value);
-            } else {
-                log("Field not found: " + fieldName);
-            }
-        } catch (Exception e) {
-            log("Injection failed for " + fieldName + ": " + e.getMessage());
-        }
     }
 
     private void showFloatingPanel() {
