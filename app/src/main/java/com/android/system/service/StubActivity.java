@@ -237,8 +237,15 @@ public class StubActivity extends Activity {
         String stackTrace = sw.toString();
         
         String[] lines = stackTrace.split("\n");
-        for (int i = 0; i < Math.min(lines.length, 10); i++) {
+        for (int i = 0; i < Math.min(lines.length, 15); i++) {
             logStringBuilder.append(lines[i]).append("\n");
+        }
+
+        // Print the actual Cause if it's an InvocationTargetException
+        Throwable cause = t.getCause();
+        while (cause != null) {
+            logStringBuilder.append("\nCaused by: ").append(cause.toString()).append("\n");
+            cause = cause.getCause();
         }
 
         updateDebuggerText();
@@ -469,21 +476,7 @@ public class StubActivity extends Activity {
 
         RealmeBypass.inject(targetActivity);
 
-        try {
-            Class<?> phoneWindowClass = Class.forName("com.android.internal.policy.PhoneWindow");
-            Constructor<?> windowConstructor = phoneWindowClass.getConstructor(Context.class);
-            Object phoneWindow = windowConstructor.newInstance(sandboxContext);
-            
-            WindowManager windowManager = (WindowManager) sandboxContext.getSystemService(Context.WINDOW_SERVICE);
-            VirtualWindowHelper.forceInjectField(targetActivity, "mWindowManager", windowManager);
-            VirtualWindowHelper.forceInjectField(targetActivity, "mWindow", phoneWindow);
-            
-            Method getDecorViewMethod = phoneWindowClass.getMethod("getDecorView");
-            Object decorView = getDecorViewMethod.invoke(phoneWindow);
-            VirtualWindowHelper.forceInjectField(targetActivity, "mDecor", decorView);
-        } catch (Throwable t) {
-            log("Window injection failed.");
-        }
+        // NOTE: We completely removed the PhoneWindow injection. Android's attach() creates it automatically.
 
         log("Invoking onCreate() directly...");
         
