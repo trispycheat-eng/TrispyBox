@@ -19,6 +19,7 @@ import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -35,6 +36,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -64,17 +66,18 @@ import dalvik.system.DexClassLoader;
 
 /**
  * =========================================================================================
- * TRISPY VIRTUAL SPACE ENGINE - ULTIMATE MONOLITH (ANDROID 11 - 15 SUPPORT)
+ * TRISPY VIRTUAL SPACE ENGINE - ULTIMATE APP STORE MONOLITH (ANDROID 11 - 15 SUPPORT)
  * =========================================================================================
- * This is a fully standalone, 100% self-contained Virtual Machine environment.
- * It includes:
- * 1. A fully programmatic UI (No XML required).
- * 2. A built-in Play Store / App Installer.
- * 3. A deep ActivityThread hook using sun.misc.Unsafe to bypass NullPointerExceptions.
- * 4. GMS Spoofing & Virtual File System (VFS).
+ * This is a fully standalone, 100% self-contained Virtual Machine environment with an
+ * integrated App Store.
+ * 
+ * Features:
+ * 1. Internal App Store UI (Fake Play Store).
+ * 2. Google Play Services (GMS) Spoofer.
+ * 3. Deep ActivityThread hook using sun.misc.Unsafe.
+ * 4. Virtual File System (VFS) for OBB and Data directories.
  * 5. Native Library Extractor (Solves UnsatisfiedLinkError).
  * 6. Hardware Spoofer (Samsung S24 Ultra).
- * 7. Multi-threaded reflection fallback engine.
  * =========================================================================================
  */
 public class StubActivity extends Activity {
@@ -82,7 +85,7 @@ public class StubActivity extends Activity {
     // =========================================================================================
     // SECTION 0: GLOBAL CONSTANTS AND VARIABLES
     // =========================================================================================
-    private static final String TAG = "TrispyGodTierEngine";
+    private static final String TAG = "TrispyStoreEngine";
     private static final String DEFAULT_TARGET_PACKAGE = "com.dts.freefiremax";
     private static final String FALLBACK_FF_ACTIVITY = "com.dts.freefireth.FFMainActivity";
     
@@ -99,7 +102,8 @@ public class StubActivity extends Activity {
     
     // UI Components (Programmatic)
     private LinearLayout rootMainLayout;
-    private LinearLayout uiLogContainer;
+    private LinearLayout storeContainer;
+    private LinearLayout logContainer;
     private TextView logTextView;
     private ScrollView logScrollView;
     private StringBuilder logStringBuilder = new StringBuilder();
@@ -125,7 +129,7 @@ public class StubActivity extends Activity {
         // 1. Initialize the Programmatic UI Dashboard
         buildMainDashboardUI();
         log("=========================================");
-        log("INITIALIZING TRISPY ULTIMATE ENGINE");
+        log("INITIALIZING TRISPY APP STORE ENGINE");
         log("=========================================");
         
         // 2. Install Global Crash Catcher
@@ -158,7 +162,7 @@ public class StubActivity extends Activity {
     }
 
     // =========================================================================================
-    // SECTION 2: PROGRAMMATIC DASHBOARD UI & LOGGER
+    // SECTION 2: PROGRAMMATIC DASHBOARD & APP STORE UI
     // =========================================================================================
 
     private void buildMainDashboardUI() {
@@ -168,36 +172,45 @@ public class StubActivity extends Activity {
             rootMainLayout.setBackgroundColor(Color.parseColor("#121212")); // Dark Mode
             rootMainLayout.setPadding(30, 30, 30, 30);
 
-            // Title
+            // Top Bar (Title)
+            LinearLayout topBar = new LinearLayout(this);
+            topBar.setOrientation(LinearLayout.HORIZONTAL);
+            topBar.setGravity(Gravity.CENTER_VERTICAL);
+            topBar.setPadding(0, 0, 0, 20);
+
             TextView title = new TextView(this);
-            title.setText("TRISPY VIRTUAL SPACE");
+            title.setText("TRISPY STORE");
             title.setTextColor(Color.parseColor("#FF2200"));
-            title.setTextSize(24);
-            title.setGravity(Gravity.CENTER);
-            title.setPadding(0, 0, 0, 20);
-            rootMainLayout.addView(title);
+            title.setTextSize(26);
+            title.setTypeface(null, Typeface.BOLD);
+            topBar.addView(title);
 
-            // Button Container
-            LinearLayout buttonContainer = new LinearLayout(this);
-            buttonContainer.setOrientation(LinearLayout.HORIZONTAL);
-            buttonContainer.setGravity(Gravity.CENTER);
-            buttonContainer.setPadding(0, 0, 0, 20);
+            rootMainLayout.addView(topBar);
 
-            // Play Store / Install Button
-            Button installBtn = new Button(this);
-            installBtn.setText("Install FF / Play Store");
-            installBtn.setBackgroundColor(Color.parseColor("#333333"));
-            installBtn.setTextColor(Color.WHITE);
-            installBtn.setOnClickListener(v -> openPlayStore());
-            buttonContainer.addView(installBtn);
+            // App Store Container (Where FF / Play Store shows up)
+            storeContainer = new LinearLayout(this);
+            storeContainer.setOrientation(LinearLayout.VERTICAL);
+            storeContainer.setBackgroundColor(Color.parseColor("#1E1E1E"));
+            storeContainer.setPadding(20, 20, 20, 20);
 
-            // Launch Button
-            Button launchBtn = new Button(this);
-            launchBtn.setText("Launch Engine");
-            launchBtn.setBackgroundColor(Color.parseColor("#FF2200"));
-            launchBtn.setTextColor(Color.WHITE);
-            launchBtn.setPadding(20, 0, 20, 0);
-            launchBtn.setOnClickListener(v -> {
+            // App Store Item: Free Fire Max
+            LinearLayout ffItem = new LinearLayout(this);
+            ffItem.setOrientation(LinearLayout.HORIZONTAL);
+            ffItem.setGravity(Gravity.CENTER_VERTICAL);
+            ffItem.setPadding(0, 10, 0, 10);
+
+            TextView ffName = new TextView(this);
+            ffName.setText("Free Fire MAX");
+            ffName.setTextColor(Color.WHITE);
+            ffName.setTextSize(18);
+            ffName.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
+            ffItem.addView(ffName);
+
+            Button playBtn = new Button(this);
+            playBtn.setText("Install/Play");
+            playBtn.setBackgroundColor(Color.parseColor("#FF2200"));
+            playBtn.setTextColor(Color.WHITE);
+            playBtn.setOnClickListener(v -> {
                 if (isEngineInitialized) {
                     try {
                         launchVirtualActivity();
@@ -205,33 +218,66 @@ public class StubActivity extends Activity {
                         logFatalError("MANUAL LAUNCH FAILED", t);
                     }
                 } else {
-                    Toast.makeText(this, "Engine is still initializing...", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Engine initializing...", Toast.LENGTH_SHORT).show();
                 }
             });
-            buttonContainer.addView(launchBtn);
+            ffItem.addView(playBtn);
+            storeContainer.addView(ffItem);
 
-            rootMainLayout.addView(buttonContainer);
+            // App Store Item: Play Store (To download other apps)
+            LinearLayout psItem = new LinearLayout(this);
+            psItem.setOrientation(LinearLayout.HORIZONTAL);
+            psItem.setGravity(Gravity.CENTER_VERTICAL);
+            psItem.setPadding(0, 10, 0, 10);
+
+            TextView psName = new TextView(this);
+            psName.setText("Google Play Store");
+            psName.setTextColor(Color.WHITE);
+            psName.setTextSize(18);
+            psName.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
+            psItem.addView(psName);
+
+            Button openPsBtn = new Button(this);
+            openPsBtn.setText("Open Store");
+            openPsBtn.setBackgroundColor(Color.parseColor("#333333"));
+            openPsBtn.setTextColor(Color.WHITE);
+            openPsBtn.setOnClickListener(v -> openPlayStore());
+            psItem.addView(openPsBtn);
+            storeContainer.addView(psItem);
+
+            rootMainLayout.addView(storeContainer);
+
+            // Spacer
+            View spacer = new View(this);
+            spacer.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 40));
+            rootMainLayout.addView(spacer);
 
             // Log Container
+            TextView logTitle = new TextView(this);
+            logTitle.setText("VM LOGS:");
+            logTitle.setTextColor(Color.GRAY);
+            logTitle.setTextSize(12);
+            rootMainLayout.addView(logTitle);
+
             logScrollView = new ScrollView(this);
             logScrollView.setBackgroundColor(Color.BLACK);
             logScrollView.setLayoutParams(new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    0,
                     1.0f
             ));
 
-            uiLogContainer = new LinearLayout(this);
-            uiLogContainer.setOrientation(LinearLayout.VERTICAL);
-            uiLogContainer.setPadding(20, 20, 20, 20);
+            logContainer = new LinearLayout(this);
+            logContainer.setOrientation(LinearLayout.VERTICAL);
+            logContainer.setPadding(20, 20, 20, 20);
 
             logTextView = new TextView(this);
             logTextView.setTextColor(Color.GREEN);
             logTextView.setTextSize(11);
-            logTextView.setTypeface(android.graphics.Typeface.MONOSPACE);
+            logTextView.setTypeface(Typeface.MONOSPACE);
 
-            uiLogContainer.addView(logTextView);
-            logScrollView.addView(uiLogContainer);
+            logContainer.addView(logTextView);
+            logScrollView.addView(logContainer);
             rootMainLayout.addView(logScrollView);
 
             setContentView(rootMainLayout);
@@ -311,7 +357,7 @@ public class StubActivity extends Activity {
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             logFatalError("UNCAUGHT EXCEPTION", throwable);
             try {
-                File crashFile = new File(getFilesDir(), "trispy_vm_crash_log.txt");
+                File crashFile = new File(getFilesDir(), "trispy_store_crash_log.txt");
                 FileOutputStream fos = new FileOutputStream(crashFile, true);
                 PrintWriter pw = new PrintWriter(fos);
                 pw.println("\n--- CRASH AT " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()) + " ---");
