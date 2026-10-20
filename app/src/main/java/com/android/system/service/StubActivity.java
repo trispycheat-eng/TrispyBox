@@ -24,6 +24,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.os.Process;
 import android.provider.Settings;
 import android.util.Log;
@@ -90,7 +91,6 @@ public class StubActivity extends Activity {
         log("=========================================");
         
         installGlobalCrashHandler();
-        VirtualWindowHelper.initUnsafe(); // Initialize Unsafe in Helper
         HardwareSpoofer.spoofHardware();
         captureIntentData();
         
@@ -388,29 +388,23 @@ public class StubActivity extends Activity {
 
     private void launchVirtualActivity() throws Exception {
         if (isActivityLaunched) return;
-        log("Initiating Reflection Hook...");
+        log("Initiating ActivityThread Hook (Bypassing Realme IActivityExt)...");
 
         Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
         Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
         currentActivityThreadMethod.setAccessible(true);
         Object currentActivityThread = currentActivityThreadMethod.invoke(null);
 
-        Method getInstrumentationMethod = activityThreadClass.getDeclaredMethod("getInstrumentation");
-        getInstrumentationMethod.setAccessible(true);
-        Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(currentActivityThread);
+        // Get the handler (mH) to send LAUNCH_ACTIVITY message
+        Field mHField = activityThreadClass.getDeclaredField("mH");
+        mHField.setAccessible(true);
+        Handler mH = (Handler) mHField.get(currentActivityThread);
 
-        Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
-        
-        Activity targetActivity;
-        try {
-            Method allocateInstanceMethod = Class.forName("sun.misc.Unsafe").getMethod("allocateInstance", Class.class);
-            Field theUnsafe = Class.forName("sun.misc.Unsafe").getDeclaredField("theUnsafe");
-            theUnsafe.setAccessible(true);
-            Object unsafe = theUnsafe.get(null);
-            targetActivity = (Activity) allocateInstanceMethod.invoke(unsafe, mainActivityClass);
-        } catch (Throwable t) {
-            targetActivity = (Activity) mainActivityClass.newInstance();
-        }
+        // Create ActivityClientRecord
+        Class<?> recordClass = Class.forName("android.app.ActivityThread$ActivityClientRecord");
+        Constructor<?> recordConstructor = recordClass.getDeclaredConstructor();
+        recordConstructor.setAccessible(true);
+        Object record = recordConstructor.newInstance();
 
         Intent targetIntent = new Intent(Intent.ACTION_MAIN);
         targetIntent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -418,68 +412,36 @@ public class StubActivity extends Activity {
         targetIntent.setComponent(componentName);
         targetIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        Method attachMethod = null;
-        for (Method m : Activity.class.getDeclaredMethods()) {
-            if (m.getName().equals("attach")) {
-                attachMethod = m;
-                break;
-            }
-        }
+        // Set fields in the record
+        Field intentField = recordClass.getDeclaredField("intent");
+        intentField.setAccessible(true);
+        intentField.set(record, targetIntent);
 
-        if (attachMethod != null) {
-            attachMethod.setAccessible(true);
-            int paramCount = attachMethod.getParameterCount();
-            Object[] args = new Object[paramCount];
-            
-            args[0] = sandboxContext;
-            args[1] = currentActivityThread;
-            args[2] = realInstrumentation;
-            args[3] = new Binder();
-            args[4] = 0;
-            args[5] = getApplication();
-            args[6] = targetIntent;
-            args[7] = targetActivityInfo;
-            args[8] = "";
-            args[9] = null;
-            args[10] = "";
-            args[11] = null;
-            args[12] = null;
-            
-            for (int i = 13; i < paramCount; i++) args[i] = null;
+        Field activityInfoField = recordClass.getDeclaredField("activityInfo");
+        activityInfoField.setAccessible(true);
+        activityInfoField.set(record, targetActivityInfo);
 
-            attachMethod.invoke(targetActivity, args);
-        }
-
-        log("Injecting Context, Window, and Bypass Locks...");
-        VirtualWindowHelper.injectEnvironment(
-                targetActivity, sandboxContext, targetIntent, componentName, 
-                targetPackageName, currentActivityThread, realInstrumentation
-        );
-
-        log("Invoking onCreate() directly...");
+        Field tokenField = recordClass.getDeclaredField("token");
+        tokenField.setAccessible(true);
+        tokenField.set(record, new Binder());
         
-        Method onCreateMethod = null;
-        Class<?> clazz = targetActivity.getClass();
-        while (clazz != null) {
-            try {
-                onCreateMethod = clazz.getDeclaredMethod("onCreate", Bundle.class);
-                break;
-            } catch (NoSuchMethodException e) {
-                clazz = clazz.getSuperclass();
-            }
-        }
-        
-        if (onCreateMethod != null) {
-            onCreateMethod.setAccessible(true);
-            onCreateMethod.invoke(targetActivity, (Bundle) null);
-        } else {
-            logError("Could not find onCreate method");
+        // Set custom ClassLoader in the record
+        Field customIntentField = recordClass.getDeclaredField("customIntent");
+        if (customIntentField != null) {
+            customIntentField.setAccessible(true);
+            customIntentField.set(record, targetIntent);
         }
 
-        setContentView(targetActivity.getWindow().getDecorView());
+        // Send LAUNCH_ACTIVITY message (100)
+        Message msg = Message.obtain();
+        msg.what = 100; // LAUNCH_ACTIVITY
+        msg.obj = record;
+
+        log("Sending LAUNCH_ACTIVITY to Realme OS...");
+        mH.sendMessage(msg);
         
         isActivityLaunched = true;
-        log("GAME ENGINE RENDERED!");
+        log("ACTIVITY LAUNCH SENT! If you see this, wait for the game to load.");
     }
 
     private void showFloatingPanel() {
