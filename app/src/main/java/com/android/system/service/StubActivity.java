@@ -8,6 +8,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -17,6 +19,7 @@ import android.graphics.Color;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.List;
 import dalvik.system.DexClassLoader;
 
 public class StubActivity extends Activity {
@@ -28,30 +31,51 @@ public class StubActivity extends Activity {
         showText("VIRTUAL SPACE INITIALIZING...\nTarget: " + targetPkg);
 
         try {
-            // 1. Get real app info
             ApplicationInfo appInfo = getPackageManager().getApplicationInfo(targetPkg, 0);
             String apkPath = appInfo.sourceDir;
             
-            // 2. Extract Native Libs (Fixes UnsatisfiedLinkError)
             File extractedLibs = NativeLibraryExtractor.extractLibs(this, apkPath, targetPkg);
             
-            // 3. Setup Sandbox Context and ClassLoader
             SandboxContext sandboxContext = new SandboxContext(this, targetPkg);
             File dexOutputDir = getDir("dex_" + targetPkg, 0);
             DexClassLoader classLoader = new DexClassLoader(
                 apkPath, dexOutputDir.getAbsolutePath(), extractedLibs.getAbsolutePath(), getClassLoader()
             );
             
-            // 4. Get the real launcher activity
+            // --- FIX: ROBUST ACTIVITY FINDER ---
             Intent launchIntent = getPackageManager().getLaunchIntentForPackage(targetPkg);
-            String actualActivityName = launchIntent.getComponent().getClassName();
-            ActivityInfo actInfo = getPackageManager().getActivityInfo(launchIntent.getComponent(), 0);
+            ComponentName componentName = null;
             
-            // 5. Create the Target Activity instance
+            if (launchIntent != null && launchIntent.getComponent() != null) {
+                componentName = launchIntent.getComponent();
+            } else {
+                // Fallback: Query PackageManager manually
+                Intent queryIntent = new Intent(Intent.ACTION_MAIN);
+                queryIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                queryIntent.setPackage(targetPkg);
+                List<ResolveInfo> resolveInfos = getPackageManager().queryIntentActivities(queryIntent, 0);
+                if (!resolveInfos.isEmpty()) {
+                    ActivityInfo activityInfo = resolveInfos.get(0).activityInfo;
+                    componentName = new ComponentName(activityInfo.packageName, activityInfo.name);
+                }
+            }
+            
+            if (componentName == null) {
+                showText("ERROR: Could not find Launcher Activity for " + targetPkg);
+                return;
+            }
+
+            String actualActivityName = componentName.getClassName();
+            ActivityInfo actInfo = getPackageManager().getActivityInfo(componentName, 0);
+            
+            // Create the new Intent explicitly
+            launchIntent = new Intent();
+            launchIntent.setComponent(componentName);
+            
+            // --- CONTINUE WITH THE LAUNCH ---
             Class<?> mainActivityClass = classLoader.loadClass(actualActivityName);
             Activity targetActivity = (Activity) mainActivityClass.newInstance();
 
-            // 6. Get REAL ActivityThread and Instrumentation (Critical for Unity)
             Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
             Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
             currentActivityThreadMethod.setAccessible(true);
@@ -61,7 +85,6 @@ public class StubActivity extends Activity {
             getInstrumentationMethod.setAccessible(true);
             Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(currentActivityThread);
 
-            // 7. Dynamically find the attach method signature (Fixes hidden API errors)
             Method attachMethod = null;
             for (Method m : Activity.class.getDeclaredMethods()) {
                 if (m.getName().equals("attach")) {
@@ -74,7 +97,6 @@ public class StubActivity extends Activity {
                 attachMethod.setAccessible(true);
                 Object[] args = new Object[attachMethod.getParameterCount()];
                 
-                // Populate with REAL objects to prevent NullPointerException
                 args[0] = sandboxContext; 
                 args[1] = currentActivityThread; 
                 args[2] = realInstrumentation; 
@@ -82,7 +104,7 @@ public class StubActivity extends Activity {
                 args[4] = 0;    
                 args[5] = getApplication(); 
                 args[6] = launchIntent; 
-                args[7] = actInfo; // REAL ActivityInfo
+                args[7] = actInfo;
                 args[8] = "";   
                 args[9] = null; 
                 args[10] = "";  
@@ -91,21 +113,18 @@ public class StubActivity extends Activity {
                 
                 for (int i = 13; i < args.length; i++) args[i] = null;
                 
-                // Attach the context
                 attachMethod.invoke(targetActivity, args);
             }
             
-            // 8. Call onCreate using Instrumentation
             realInstrumentation.callActivityOnCreate(targetActivity, savedInstanceState);
             
-            // 9. Render the game screen!
             setContentView(targetActivity.getWindow().getDecorView());
             showToast("Engine Loaded: " + actualActivityName);
 
         } catch (Throwable t) {
             Log.e("TrispyVM", "Launch failed", t);
             Throwable cause = t.getCause() != null ? t.getCause() : t;
-            showText("VIRTUAL SPACE ERROR:\n\n" + cause.toString() + "\n\nIf this says NullPointer or Resources, Unity blocked the sandbox.");
+            showText("VIRTUAL SPACE ERROR:\n\n" + cause.toString());
         }
     }
 
@@ -122,4 +141,4 @@ public class StubActivity extends Activity {
     private void showToast(String msg) {
         android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show();
     }
-                    }
+}
