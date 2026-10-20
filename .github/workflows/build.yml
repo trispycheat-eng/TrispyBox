@@ -1,21 +1,30 @@
 name: Build Trispy Space
+
 on: [push, workflow_dispatch]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+      with:
+        gradle-version: 8.2
+
+    # REMOVED the chmod step because we don't have ./gradlew
+
     - name: Build Debug APK
-      run: gradle assembleDebug
+      run: gradle assembleDebug --no-daemon --stacktrace
+      
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
