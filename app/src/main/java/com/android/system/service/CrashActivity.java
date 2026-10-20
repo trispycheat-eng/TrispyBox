@@ -11,10 +11,9 @@ public class CrashActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         String error = getIntent().getStringExtra("error");
-        
         ScrollView scroll = new ScrollView(this);
         TextView tv = new TextView(this);
-        tv.setText("CRASH DETECTED:\n\n" + error);
+        tv.setText("FREE FIRE CRASHED:\n\n" + error);
         tv.setTextColor(Color.RED);
         tv.setTextSize(12);
         tv.setPadding(20, 20, 20, 20);
