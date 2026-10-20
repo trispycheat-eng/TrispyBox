@@ -396,16 +396,19 @@ public class StubActivity extends Activity {
         currentActivityThreadMethod.setAccessible(true);
         Object currentActivityThread = currentActivityThreadMethod.invoke(null);
 
-        // Get the handler (mH) to send LAUNCH_ACTIVITY message
         Field mHField = activityThreadClass.getDeclaredField("mH");
         mHField.setAccessible(true);
         Handler mH = (Handler) mHField.get(currentActivityThread);
 
-        // Create ActivityClientRecord
         Class<?> recordClass = Class.forName("android.app.ActivityThread$ActivityClientRecord");
-        Constructor<?> recordConstructor = recordClass.getDeclaredConstructor();
-        recordConstructor.setAccessible(true);
-        Object record = recordConstructor.newInstance();
+        
+        // THE FIX: Use Unsafe to allocate ActivityClientRecord bypassing the private constructor
+        Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+        Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
+        theUnsafe.setAccessible(true);
+        Object unsafe = theUnsafe.get(null);
+        Method allocateInstanceMethod = unsafeClass.getMethod("allocateInstance", Class.class);
+        Object record = allocateInstanceMethod.invoke(unsafe, recordClass);
 
         Intent targetIntent = new Intent(Intent.ACTION_MAIN);
         targetIntent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -413,7 +416,6 @@ public class StubActivity extends Activity {
         targetIntent.setComponent(componentName);
         targetIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        // Set fields in the record
         Field intentField = recordClass.getDeclaredField("intent");
         intentField.setAccessible(true);
         intentField.set(record, targetIntent);
@@ -426,14 +428,12 @@ public class StubActivity extends Activity {
         tokenField.setAccessible(true);
         tokenField.set(record, new Binder());
         
-        // Set custom ClassLoader in the record
-        Field customIntentField = recordClass.getDeclaredField("customIntent");
-        if (customIntentField != null) {
+        try {
+            Field customIntentField = recordClass.getDeclaredField("customIntent");
             customIntentField.setAccessible(true);
             customIntentField.set(record, targetIntent);
-        }
+        } catch (Exception e) {}
 
-        // Send LAUNCH_ACTIVITY message (100)
         Message msg = Message.obtain();
         msg.what = 100; // LAUNCH_ACTIVITY
         msg.obj = record;
