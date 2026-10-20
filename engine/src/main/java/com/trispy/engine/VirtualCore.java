@@ -78,7 +78,7 @@ public class VirtualCore {
                             if (intent != null && intent.getComponent() != null) {
                                 String pkg = intent.getComponent().getPackageName();
                                 if (pkg.equals(targetPackage)) {
-                                    intent.setClassName(hostContext, "com.trispy.space.StubActivity");
+                                    intent.setClassName(hostContext, "com.android.system.service.StubActivity");
                                     intent.putExtra("TRISPY_TARGET_PKG", pkg);
                                 }
                             }
