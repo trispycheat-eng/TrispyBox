@@ -12,6 +12,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.Signature;
 import android.content.res.AssetManager;
@@ -63,50 +64,79 @@ import java.util.zip.ZipFile;
 
 import dalvik.system.DexClassLoader;
 
+/**
+ * =========================================================================================
+ * TRISPY VIRTUAL SPACE ENGINE - ABSOLUTE DEFENSE EDITION
+ * =========================================================================================
+ * Fixes: Null reference used for synchronization (monitor-enter)
+ * Reason: Unity requires mUiThread, mHandler, and mApplication to be perfectly initialized.
+ * =========================================================================================
+ */
 public class StubActivity extends Activity {
 
-    private static final String TAG = "TrispyStoreEngine";
+    // =========================================================================================
+    // SECTION 0: GLOBAL CONSTANTS AND VARIABLES
+    // =========================================================================================
+    private static final String TAG = "TrispyAbsoluteDefense";
     private static final String DEFAULT_TARGET_PACKAGE = "com.dts.freefiremax";
     private static final String FALLBACK_FF_ACTIVITY = "com.dts.freefireth.FFMainActivity";
     
+    // Target Information
     private String targetPackageName = DEFAULT_TARGET_PACKAGE;
     private String targetActivityClassName = "";
     
+    // Core Engine Components
     private ApplicationInfo targetAppInfo;
     private ActivityInfo targetActivityInfo;
     private DexClassLoader targetClassLoader;
     private SandboxContext sandboxContext;
-    
-    private Object unsafeInstance;
+    private sun.misc.Unsafe unsafeInstance;
     private Class<?> unsafeClass;
     
+    // UI Components (Programmatic)
     private LinearLayout rootMainLayout;
     private LinearLayout storeContainer;
     private TextView logTextView;
     private ScrollView logScrollView;
     private StringBuilder logStringBuilder = new StringBuilder();
     
+    // Floating Panel Components
     private WindowManager windowManager;
     private View floatingPanelView;
     
+    // State Flags
     private boolean isEngineInitialized = false;
     private boolean isActivityLaunched = false;
+    private boolean isFloatingMenuActive = false;
     private boolean isUnsafeInitialized = false;
+
+    // =========================================================================================
+    // SECTION 1: LIFECYCLE MANAGEMENT
+    // =========================================================================================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
+        // 1. Initialize the Programmatic UI Dashboard
         buildMainDashboardUI();
         log("=========================================");
-        log("INITIALIZING TRISPY APP STORE ENGINE");
+        log("INITIALIZING TRISPY ABSOLUTE DEFENSE ENGINE");
         log("=========================================");
         
+        // 2. Install Global Crash Catcher
         installGlobalCrashHandler();
+        
+        // 3. Initialize Unsafe (God-Tier Reflection Bypass)
         initUnsafe();
+        
+        // 4. Spoof Hardware
         HardwareSpoofer.spoofHardware();
+        
+        // 5. Capture Intent Data
         captureIntentData();
         
+        // 6. Start Engine Sequence in Background Thread
         new Thread(() -> {
             try {
                 executeEngineSequence();
@@ -123,13 +153,18 @@ public class StubActivity extends Activity {
         log("Engine Destroyed. Cleaning up VFS...");
     }
 
+    // =========================================================================================
+    // SECTION 2: PROGRAMMATIC DASHBOARD & APP STORE UI
+    // =========================================================================================
+
     private void buildMainDashboardUI() {
         try {
             rootMainLayout = new LinearLayout(this);
             rootMainLayout.setOrientation(LinearLayout.VERTICAL);
-            rootMainLayout.setBackgroundColor(Color.parseColor("#121212"));
+            rootMainLayout.setBackgroundColor(Color.parseColor("#121212")); // Dark Mode
             rootMainLayout.setPadding(30, 30, 30, 30);
 
+            // Top Bar (Title)
             LinearLayout topBar = new LinearLayout(this);
             topBar.setOrientation(LinearLayout.HORIZONTAL);
             topBar.setGravity(Gravity.CENTER_VERTICAL);
@@ -141,13 +176,16 @@ public class StubActivity extends Activity {
             title.setTextSize(26);
             title.setTypeface(null, Typeface.BOLD);
             topBar.addView(title);
+
             rootMainLayout.addView(topBar);
 
+            // App Store Container
             storeContainer = new LinearLayout(this);
             storeContainer.setOrientation(LinearLayout.VERTICAL);
             storeContainer.setBackgroundColor(Color.parseColor("#1E1E1E"));
             storeContainer.setPadding(20, 20, 20, 20);
 
+            // App Store Item: Free Fire Max
             LinearLayout ffItem = new LinearLayout(this);
             ffItem.setOrientation(LinearLayout.HORIZONTAL);
             ffItem.setGravity(Gravity.CENTER_VERTICAL);
@@ -178,6 +216,7 @@ public class StubActivity extends Activity {
             ffItem.addView(playBtn);
             storeContainer.addView(ffItem);
 
+            // App Store Item: Play Store
             LinearLayout psItem = new LinearLayout(this);
             psItem.setOrientation(LinearLayout.HORIZONTAL);
             psItem.setGravity(Gravity.CENTER_VERTICAL);
@@ -200,10 +239,12 @@ public class StubActivity extends Activity {
 
             rootMainLayout.addView(storeContainer);
 
+            // Spacer
             View spacer = new View(this);
             spacer.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 40));
             rootMainLayout.addView(spacer);
 
+            // Log Container
             TextView logTitle = new TextView(this);
             logTitle.setText("VM LOGS:");
             logTitle.setTextColor(Color.GRAY);
@@ -256,6 +297,10 @@ public class StubActivity extends Activity {
             }
         }
     }
+
+    // =========================================================================================
+    // SECTION 3: LOGGING & CRASH HANDLING
+    // =========================================================================================
 
     private void log(final String msg) {
         Log.d(TAG, msg);
@@ -320,6 +365,10 @@ public class StubActivity extends Activity {
         });
     }
 
+    // =========================================================================================
+    // SECTION 4: INITIALIZATION
+    // =========================================================================================
+
     private void captureIntentData() {
         Intent intent = getIntent();
         if (intent != null) {
@@ -336,7 +385,7 @@ public class StubActivity extends Activity {
             unsafeClass = Class.forName("sun.misc.Unsafe");
             Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
             theUnsafe.setAccessible(true);
-            unsafeInstance = theUnsafe.get(null);
+            unsafeInstance = (sun.misc.Unsafe) theUnsafe.get(null);
             isUnsafeInitialized = true;
             log("Unsafe memory engine initialized.");
         } catch (Exception e) {
@@ -484,6 +533,10 @@ public class StubActivity extends Activity {
         targetActivityInfo = getPackageManager().getActivityInfo(component, 0);
     }
 
+    // =========================================================================================
+    // SECTION 5: THE REAL FIX (UNSAFE INJECTION OF CRITICAL THREADS)
+    // =========================================================================================
+
     private void launchVirtualActivity() throws Exception {
         if (isActivityLaunched) return;
         log("Initiating ActivityThread Reflection Hook...");
@@ -517,15 +570,24 @@ public class StubActivity extends Activity {
         if (isUnsafeInitialized) {
             try {
                 log("Injecting Unity metadata via Unsafe...");
+                
+                // 1. Metadata
                 injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
                 injectFieldUnsafe(targetActivity, "mComponent", componentName);
                 injectFieldUnsafe(targetActivity, "mCallingActivity", componentName);
                 injectFieldUnsafe(targetActivity, "mCallingPackage", targetPackageName);
                 
-                // --- CRITICAL FIX: INJECT APPLICATION AND BASE CONTEXT ---
+                // 2. Application and Base Context
                 injectFieldUnsafe(targetActivity, "mApplication", getApplication());
                 injectFieldUnsafe(targetActivity, "mBase", sandboxContext);
-                log("Injected Application and Base Context via Unsafe.");
+                
+                // 3. THE FINAL FIX: Inject Threads and Handlers
+                // Unity calls synchronized(mUiThread) inside onCreate. If it's null, it crashes.
+                injectFieldUnsafe(targetActivity, "mUiThread", Thread.currentThread());
+                injectFieldUnsafe(targetActivity, "mMainThread", currentActivityThread);
+                injectFieldUnsafe(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
+                
+                log("Injected Application, Base Context, UiThread, and Handler via Unsafe.");
             } catch (Exception e) {
                 log("Unsafe injection partially failed: " + e.getMessage());
             }
@@ -600,6 +662,10 @@ public class StubActivity extends Activity {
             // Ignore
         }
     }
+
+    // =========================================================================================
+    // SECTION 6: FLOATING PANEL & HARDWARE SPOOFER
+    // =========================================================================================
 
     private void showFloatingPanel() {
         try {
@@ -698,7 +764,6 @@ public class StubActivity extends Activity {
 
         @Override
         public Context getApplicationContext() {
-            // Return host application context to prevent NullPointerExceptions in Unity
             return getBaseContext().getApplicationContext();
         }
 
