@@ -10,7 +10,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -28,6 +27,7 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -41,6 +41,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
@@ -56,51 +57,33 @@ import java.util.zip.ZipFile;
 
 import dalvik.system.DexClassLoader;
 
-/**
- * =========================================================================================
- * TRISPY VIRTUAL SPACE ENGINE - ABSOLUTE DEFENSE EDITION (COMPILE SAFE)
- * =========================================================================================
- */
 public class StubActivity extends Activity {
 
-    // =========================================================================================
-    // SECTION 0: GLOBAL CONSTANTS AND VARIABLES
-    // =========================================================================================
     private static final String TAG = "TrispyAbsoluteDefense";
     private static final String DEFAULT_TARGET_PACKAGE = "com.dts.freefiremax";
     private static final String FALLBACK_FF_ACTIVITY = "com.dts.freefireth.FFMainActivity";
     
-    // Target Information
     private String targetPackageName = DEFAULT_TARGET_PACKAGE;
     private String targetActivityClassName = "";
     
-    // Core Engine Components
     private ApplicationInfo targetAppInfo;
     private ActivityInfo targetActivityInfo;
     private DexClassLoader targetClassLoader;
     private SandboxContext sandboxContext;
     
-    // UNSAFE VIA OBJECT & REFLECTION (Bypasses the compiler error)
     private Object unsafeInstance;
     private Class<?> unsafeClass;
     
-    // UI Components
     private TextView logTextView;
     private ScrollView logScrollView;
     private StringBuilder logStringBuilder = new StringBuilder();
     
-    // Floating Panel Components
     private WindowManager windowManager;
     private View floatingPanelView;
     
-    // State Flags
     private boolean isEngineInitialized = false;
     private boolean isActivityLaunched = false;
     private boolean isUnsafeInitialized = false;
-
-    // =========================================================================================
-    // SECTION 1: LIFECYCLE MANAGEMENT
-    // =========================================================================================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -131,10 +114,6 @@ public class StubActivity extends Activity {
         destroyFloatingPanel();
         log("Engine Destroyed.");
     }
-
-    // =========================================================================================
-    // SECTION 2: PROGRAMMATIC DASHBOARD & APP STORE UI
-    // =========================================================================================
 
     private void buildMainDashboardUI() {
         try {
@@ -264,10 +243,6 @@ public class StubActivity extends Activity {
         }
     }
 
-    // =========================================================================================
-    // SECTION 3: LOGGING & CRASH HANDLING
-    // =========================================================================================
-
     private void log(final String msg) {
         Log.d(TAG, msg);
         logStringBuilder.append("[*] ").append(msg).append("\n");
@@ -284,9 +259,18 @@ public class StubActivity extends Activity {
         Log.e(TAG, header, t);
         logStringBuilder.append("\n[X] ").append(header).append("\n");
         logStringBuilder.append("Reason: ").append(t.toString()).append("\n");
-        if (t.getCause() != null) {
-            logStringBuilder.append("Cause: ").append(t.getCause().toString()).append("\n");
+        
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        t.printStackTrace(pw);
+        String stackTrace = sw.toString();
+        
+        // Append the first 15 lines of the stack trace to the UI
+        String[] lines = stackTrace.split("\n");
+        for (int i = 0; i < Math.min(lines.length, 15); i++) {
+            logStringBuilder.append(lines[i]).append("\n");
         }
+
         updateDebuggerText();
         
         runOnUiThread(() -> {
@@ -313,10 +297,6 @@ public class StubActivity extends Activity {
             System.exit(1);
         });
     }
-
-    // =========================================================================================
-    // SECTION 4: INITIALIZATION
-    // =========================================================================================
 
     private void captureIntentData() {
         Intent intent = getIntent();
@@ -450,10 +430,6 @@ public class StubActivity extends Activity {
         targetActivityInfo = getPackageManager().getActivityInfo(component, 0);
     }
 
-    // =========================================================================================
-    // SECTION 5: THE REAL FIX (UNSAFE INJECTION VIA REFLECTION)
-    // =========================================================================================
-
     private void launchVirtualActivity() throws Exception {
         if (isActivityLaunched) return;
         log("Initiating Reflection Hook...");
@@ -485,7 +461,27 @@ public class StubActivity extends Activity {
 
         if (isUnsafeInitialized) {
             try {
-                log("Injecting critical threads & metadata via Unsafe...");
+                log("Injecting Window and DecorView via Unsafe...");
+                
+                // Create PhoneWindow
+                Class<?> phoneWindowClass = Class.forName("com.android.internal.policy.PhoneWindow");
+                Constructor<?> phoneWindowConstructor = phoneWindowClass.getConstructor(Context.class);
+                Object phoneWindow = phoneWindowConstructor.newInstance(targetActivity);
+                
+                WindowManager windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+                
+                Method setWindowManagerMethod = phoneWindowClass.getMethod("setWindowManager", WindowManager.class, android.os.IBinder.class, String.class, boolean.class);
+                setWindowManagerMethod.invoke(phoneWindow, windowManager, new Binder(), targetPackageName, false);
+                
+                injectFieldUnsafe(targetActivity, "mWindow", phoneWindow);
+                injectFieldUnsafe(targetActivity, "mWindowManager", windowManager);
+                
+                Method getDecorViewMethod = phoneWindowClass.getMethod("getDecorView");
+                Object decorView = getDecorViewMethod.invoke(phoneWindow);
+                injectFieldUnsafe(targetActivity, "mDecor", decorView);
+                
+                injectFieldUnsafe(targetActivity, "mInstrumentation", realInstrumentation);
+                injectFieldUnsafe(targetActivity, "mToken", new Binder());
                 
                 injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
                 injectFieldUnsafe(targetActivity, "mComponent", componentName);
@@ -495,11 +491,14 @@ public class StubActivity extends Activity {
                 injectFieldUnsafe(targetActivity, "mApplication", getApplication());
                 injectFieldUnsafe(targetActivity, "mBase", sandboxContext);
                 
-                // FIXES MONITOR-ENTER CRASH
+                // THE MONITOR-ENTER FIX
                 injectFieldUnsafe(targetActivity, "mUiThread", Thread.currentThread());
                 injectFieldUnsafe(targetActivity, "mMainThread", currentActivityThread);
                 injectFieldUnsafe(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
+                injectFieldUnsafe(targetActivity, "mActionBar", null);
+                injectFieldUnsafe(targetActivity, "mParent", null);
                 
+                log("Injected Window, Threads, and Metadata.");
             } catch (Exception e) {
                 log("Unsafe injection partially failed: " + e.getMessage());
             }
@@ -534,6 +533,7 @@ public class StubActivity extends Activity {
             
             for (int i = 13; i < paramCount; i++) args[i] = null;
 
+            log("Invoking attach()...");
             attachMethod.invoke(targetActivity, args);
         }
 
@@ -569,10 +569,6 @@ public class StubActivity extends Activity {
             }
         } catch (Exception e) {}
     }
-
-    // =========================================================================================
-    // SECTION 6: FLOATING PANEL & HARDWARE SPOOFER
-    // =========================================================================================
 
     private void showFloatingPanel() {
         try {
