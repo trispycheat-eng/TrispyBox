@@ -20,12 +20,17 @@ jobs:
       with:
         gradle-version: 8.2
 
-    # REMOVED the chmod step because we don't have ./gradlew
-
     - name: Build Debug APK
-      run: gradle assembleDebug --no-daemon --stacktrace
-      
+      run: gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee build_log.txt
+
+    - name: Show Exact Error
+      if: failure()
+      run: |
+        echo "=============== EXACT ERROR ==============="
+        grep -i -E "error:|Caused by:|What went wrong:" build_log.txt -A 5 -B 2
+
     - name: Upload APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: TrispySpace-APK
