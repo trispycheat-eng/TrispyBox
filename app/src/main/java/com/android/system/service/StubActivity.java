@@ -27,7 +27,6 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -41,17 +40,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -265,7 +260,6 @@ public class StubActivity extends Activity {
         t.printStackTrace(pw);
         String stackTrace = sw.toString();
         
-        // Append the first 15 lines of the stack trace to the UI
         String[] lines = stackTrace.split("\n");
         for (int i = 0; i < Math.min(lines.length, 15); i++) {
             logStringBuilder.append(lines[i]).append("\n");
@@ -459,51 +453,6 @@ public class StubActivity extends Activity {
         targetIntent.setComponent(componentName);
         targetIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        if (isUnsafeInitialized) {
-            try {
-                log("Injecting Window and DecorView via Unsafe...");
-                
-                // Create PhoneWindow
-                Class<?> phoneWindowClass = Class.forName("com.android.internal.policy.PhoneWindow");
-                Constructor<?> phoneWindowConstructor = phoneWindowClass.getConstructor(Context.class);
-                Object phoneWindow = phoneWindowConstructor.newInstance(targetActivity);
-                
-                WindowManager windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-                
-                Method setWindowManagerMethod = phoneWindowClass.getMethod("setWindowManager", WindowManager.class, android.os.IBinder.class, String.class, boolean.class);
-                setWindowManagerMethod.invoke(phoneWindow, windowManager, new Binder(), targetPackageName, false);
-                
-                injectFieldUnsafe(targetActivity, "mWindow", phoneWindow);
-                injectFieldUnsafe(targetActivity, "mWindowManager", windowManager);
-                
-                Method getDecorViewMethod = phoneWindowClass.getMethod("getDecorView");
-                Object decorView = getDecorViewMethod.invoke(phoneWindow);
-                injectFieldUnsafe(targetActivity, "mDecor", decorView);
-                
-                injectFieldUnsafe(targetActivity, "mInstrumentation", realInstrumentation);
-                injectFieldUnsafe(targetActivity, "mToken", new Binder());
-                
-                injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
-                injectFieldUnsafe(targetActivity, "mComponent", componentName);
-                injectFieldUnsafe(targetActivity, "mCallingActivity", componentName);
-                injectFieldUnsafe(targetActivity, "mCallingPackage", targetPackageName);
-                
-                injectFieldUnsafe(targetActivity, "mApplication", getApplication());
-                injectFieldUnsafe(targetActivity, "mBase", sandboxContext);
-                
-                // THE MONITOR-ENTER FIX
-                injectFieldUnsafe(targetActivity, "mUiThread", Thread.currentThread());
-                injectFieldUnsafe(targetActivity, "mMainThread", currentActivityThread);
-                injectFieldUnsafe(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
-                injectFieldUnsafe(targetActivity, "mActionBar", null);
-                injectFieldUnsafe(targetActivity, "mParent", null);
-                
-                log("Injected Window, Threads, and Metadata.");
-            } catch (Exception e) {
-                log("Unsafe injection partially failed: " + e.getMessage());
-            }
-        }
-
         Method attachMethod = null;
         for (Method m : Activity.class.getDeclaredMethods()) {
             if (m.getName().equals("attach")) {
@@ -535,6 +484,29 @@ public class StubActivity extends Activity {
 
             log("Invoking attach()...");
             attachMethod.invoke(targetActivity, args);
+        }
+
+        // --- THE REAL FIX: INJECT METADATA AFTER ATTACH, BEFORE ONCREATE ---
+        if (isUnsafeInitialized) {
+            try {
+                log("Injecting critical metadata via Unsafe...");
+                
+                injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
+                injectFieldUnsafe(targetActivity, "mComponent", componentName);
+                injectFieldUnsafe(targetActivity, "mCallingActivity", componentName);
+                injectFieldUnsafe(targetActivity, "mCallingPackage", targetPackageName);
+                
+                injectFieldUnsafe(targetActivity, "mApplication", getApplication());
+                injectFieldUnsafe(targetActivity, "mBase", sandboxContext);
+                
+                injectFieldUnsafe(targetActivity, "mUiThread", Thread.currentThread());
+                injectFieldUnsafe(targetActivity, "mMainThread", currentActivityThread);
+                injectFieldUnsafe(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
+                
+                log("Metadata injection complete.");
+            } catch (Exception e) {
+                log("Unsafe injection failed: " + e.getMessage());
+            }
         }
 
         log("Invoking onCreate()...");
