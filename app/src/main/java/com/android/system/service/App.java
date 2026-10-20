@@ -11,16 +11,12 @@ public class App extends Application {
     public void onCreate() {
         super.onCreate();
         
-        // GLOBAL CRASH HANDLER
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             Log.e("TrispySpace", "CRASH: " + Log.getStackTraceString(throwable));
-            
-            // Show the error on the screen
             Intent intent = new Intent(this, CrashActivity.class);
             intent.putExtra("error", Log.getStackTraceString(throwable));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
-            
             Process.killProcess(Process.myPid());
             System.exit(1);
         });
