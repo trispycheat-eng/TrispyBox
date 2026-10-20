@@ -2,7 +2,6 @@ package com.android.system.service;
 
 import android.app.Activity;
 import android.app.ActivityManager;
-import android.app.ActivityThread;
 import android.app.Application;
 import android.app.Instrumentation;
 import android.content.ComponentName;
@@ -70,12 +69,6 @@ import dalvik.system.DexClassLoader;
 /**
  * =========================================================================================
  * TRISPY VIRTUAL SPACE ENGINE - THE MONOLITH (1000+ LINES)
- * =========================================================================================
- * This is the ultimate, crash-proof sandbox engine. It is designed to hijack the Android
- * ActivityThread, extract native libraries, spoof the hardware to a Samsung Galaxy S24 Ultra,
- * proxy the Google Play Services, and redirect file paths to a Virtual File System.
- *
- * It contains 9 internal engines to ensure maximum compatibility and zero crashes.
  * =========================================================================================
  */
 public class StubActivity extends Activity {
@@ -220,7 +213,6 @@ public class StubActivity extends Activity {
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             logFatalError("UNCAUGHT EXCEPTION", throwable);
             
-            // Write crash to file
             try {
                 File crashFile = new File(getFilesDir(), "trispy_crash_log.txt");
                 FileWriter writer = new FileWriter(crashFile, true);
@@ -235,7 +227,6 @@ public class StubActivity extends Activity {
                 Log.e(TAG, "Failed to write crash log", e);
             }
             
-            // Let the system kill the app after a delay
             try {
                 Thread.sleep(3000);
             } catch (InterruptedException e) {
@@ -268,25 +259,12 @@ public class StubActivity extends Activity {
     private void executeEngineSequence() throws Exception {
         if (isEngineInitialized) return;
         
-        // Step 1: Fetch AppInfo
         resolveApplicationInfo();
-        
-        // Step 2: Setup Virtual File System (VFS)
         setupVirtualFileSystem();
-        
-        // Step 3: Extract Native Libs
         extractNativeLibraries();
-        
-        // Step 4: Resolve Activity
         resolveTargetActivity();
-        
-        // Step 5: Setup ClassLoader & Context
         setupEnvironment();
-        
-        // Step 6: The Reflection Hook
         launchVirtualActivity();
-        
-        // Step 7: Show Floating Menu
         showFloatingPanel();
         
         isEngineInitialized = true;
@@ -310,7 +288,6 @@ public class StubActivity extends Activity {
 
     private void setupVirtualFileSystem() {
         log("Setting up Virtual File System (VFS)...");
-        
         virtualDataDir = new File(getFilesDir(), "TrispyVM_Data/" + targetPackageName);
         virtualObbDir = new File(getFilesDir(), "TrispyVM_Obb/" + targetPackageName);
         
@@ -327,13 +304,11 @@ public class StubActivity extends Activity {
 
     private void extractNativeLibraries() {
         log("Extracting Native Libraries from APK...");
-        
         File libDir = new File(getFilesDir(), "TrispyVM_Libs/" + targetPackageName);
         if (!libDir.exists()) libDir.mkdirs();
 
         try (ZipFile zip = new ZipFile(targetAppInfo.sourceDir)) {
             Enumeration<? extends ZipEntry> entries = zip.entries();
-            
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String entryName = entry.getName();
@@ -368,7 +343,6 @@ public class StubActivity extends Activity {
     private void resolveTargetActivity() {
         log("Resolving Target Activity...");
 
-        // Fallback 1: getLaunchIntentForPackage
         try {
             Intent intent = getPackageManager().getLaunchIntentForPackage(targetPackageName);
             if (intent != null && intent.getComponent() != null) {
@@ -376,17 +350,13 @@ public class StubActivity extends Activity {
                 log("Resolved via Intent: " + targetActivityClassName);
                 return;
             }
-        } catch (Throwable t) {
-            logError("Intent resolution failed.");
-        }
+        } catch (Throwable t) { logError("Intent resolution failed."); }
 
-        // Fallback 2: queryIntentActivities
         try {
             Intent queryIntent = new Intent(Intent.ACTION_MAIN);
             queryIntent.addCategory(Intent.CATEGORY_LAUNCHER);
             queryIntent.setPackage(targetPackageName);
             List<ResolveInfo> resolveInfos = getPackageManager().queryIntentActivities(queryIntent, 0);
-            
             if (resolveInfos != null && !resolveInfos.isEmpty()) {
                 ActivityInfo info = resolveInfos.get(0).activityInfo;
                 if (info != null && info.name != null) {
@@ -395,11 +365,8 @@ public class StubActivity extends Activity {
                     return;
                 }
             }
-        } catch (Throwable t) {
-            logError("Query resolution failed.");
-        }
+        } catch (Throwable t) { logError("Query resolution failed."); }
 
-        // Fallback 3: Hardcoded for Free Fire
         if (targetPackageName.contains("freefire")) {
             targetActivityClassName = FALLBACK_FF_ACTIVITY;
             log("Resolved via Hardcoded: " + targetActivityClassName);
@@ -449,7 +416,7 @@ public class StubActivity extends Activity {
     private void launchVirtualActivity() throws Exception {
         log("Initiating ActivityThread Reflection Hook...");
 
-        // Step 1: Get ActivityThread
+        // Step 1: Get ActivityThread via reflection (No imports!)
         Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
         Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
         currentActivityThreadMethod.setAccessible(true);
@@ -681,4 +648,4 @@ public class StubActivity extends Activity {
             );
         }
     }
-                    }
+}
