@@ -2,11 +2,15 @@ package com.android.system.service;
 
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
+import android.os.Environment;
 import android.util.Log;
-import java.lang.reflect.Method;
+import java.io.File;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 
 public class SandboxContext extends ContextWrapper {
     private final String targetPackage;
@@ -17,7 +21,7 @@ public class SandboxContext extends ContextWrapper {
         this.targetPackage = targetPackage;
         try {
             AssetManager assets = AssetManager.class.newInstance();
-            Method addAssetPath = AssetManager.class.getMethod("addAssetPath", String.class);
+            java.lang.reflect.Method addAssetPath = AssetManager.class.getMethod("addAssetPath", String.class);
             String apkPath = getPackageManager().getApplicationInfo(targetPackage, 0).sourceDir;
             addAssetPath.invoke(assets, apkPath);
 
@@ -38,21 +42,46 @@ public class SandboxContext extends ContextWrapper {
         return targetResources != null ? targetResources : super.getResources();
     }
 
-    // SPOOF GOOGLE PLAY SERVICES
+    // FIX OBB PATH: Redirect FF to the real OBB folder
+    @Override
+    public File getObbDir() {
+        File realObb = new File(Environment.getExternalStorageDirectory(), "Android/obb/" + targetPackage);
+        if (realObb.exists()) return realObb;
+        return super.getObbDir();
+    }
+
+    // THE MAGIC GMS & SIGNATURE SPOOFER
     @Override
     public PackageManager getPackageManager() {
-        return new PackageManagerWrapper(getBaseContext().getPackageManager()) {
-            @Override
-            public android.content.pm.PackageInfo getPackageInfo(String packageName, int flags) throws NameNotFoundException {
-                // If FF asks for GMS, return a fake PackageInfo
-                if (packageName.equals("com.google.android.gms")) {
-                    android.content.pm.PackageInfo info = new android.content.pm.PackageInfo();
-                    info.packageName = "com.google.android.gms";
-                    info.versionName = "22.0.0";
-                    return info;
+        PackageManager basePm = getBaseContext().getPackageManager();
+        
+        return (PackageManager) Proxy.newProxyInstance(
+            PackageManager.class.getClassLoader(),
+            new Class<?>[]{PackageManager.class},
+            (proxy, method, args) -> {
+                // 1. Spoof GMS Package Info
+                if (method.getName().equals("getPackageInfo") && args != null && args.length > 0) {
+                    String pkg = (String) args[0];
+                    if (pkg != null && pkg.contains("com.google.android.gms")) {
+                        PackageInfo fakeGms = new PackageInfo();
+                        fakeGms.packageName = pkg;
+                        fakeGms.versionName = "22.0.0";
+                        return fakeGms;
+                    }
                 }
-                return super.getPackageInfo(packageName, flags);
+                
+                // 2. Spoof Signature check (Prevents "hacked app" crash)
+                if (method.getName().equals("getPackageSignatures") || method.getName().equals("checkSignatures")) {
+                    if (method.getName().equals("checkSignatures")) return PackageManager.SIGNATURE_MATCH;
+                    return new android.content.pm.Signature[]{ new android.content.pm.Signature("MOCK") };
+                }
+
+                try {
+                    return method.invoke(basePm, args);
+                } catch (InvocationTargetException e) {
+                    throw e.getCause();
+                }
             }
-        };
+        );
     }
 }
