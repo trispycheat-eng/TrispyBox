@@ -6,6 +6,7 @@ import android.content.pm.PackageInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.Settings;
 import android.widget.Button;
 import android.widget.Toast;
@@ -41,13 +42,24 @@ public class MainActivity extends AppCompatActivity {
         loadInstalledApps();
 
         adapter = new AppListAdapter(this, appList, pkg -> {
+            // 1. Ask for Overlay Permission
             if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
                 pendingPackage = pkg.packageName;
                 Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
                 startActivityForResult(intent, 1002);
-            } else {
-                launchTarget(pkg.packageName);
+                return;
             }
+            
+            // 2. Ask for All Files Access (For OBB)
+            if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
+                pendingPackage = pkg.packageName;
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + getPackageName()));
+                startActivityForResult(intent, 1003);
+                return;
+            }
+
+            // 3. Launch
+            launchTarget(pkg.packageName);
         });
         recyclerView.setAdapter(adapter);
 
@@ -75,14 +87,33 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         
+        // If Overlay was granted
         if (requestCode == 1002) {
             if (Build.VERSION.SDK_INT >= 23 && Settings.canDrawOverlays(this)) {
-                if (!pendingPackage.isEmpty()) launchTarget(pendingPackage);
+                if (!pendingPackage.isEmpty()) {
+                    // Now check for OBB permission
+                    if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + getPackageName()));
+                        startActivityForResult(intent, 1003);
+                    } else {
+                        launchTarget(pendingPackage);
+                    }
+                }
             } else {
                 Toast.makeText(this, "Overlay permission is required!", Toast.LENGTH_LONG).show();
             }
         }
+
+        // If OBB/All Files Access was granted
+        if (requestCode == 1003) {
+            if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) {
+                if (!pendingPackage.isEmpty()) launchTarget(pendingPackage);
+            } else {
+                Toast.makeText(this, "All Files Access is required for OBB!", Toast.LENGTH_LONG).show();
+            }
+        }
         
+        // File Picker Result
         if (requestCode == 1001 && resultCode == RESULT_OK && data != null) {
             Uri fileUri = data.getData();
             if (fileUri != null) {
