@@ -3,6 +3,8 @@ package com.android.system.service;
 import android.app.Activity;
 import android.app.Application;
 import android.app.Instrumentation;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -150,7 +152,7 @@ public class StubActivity extends Activity {
             ffItem.addView(ffName);
 
             Button playBtn = new Button(this);
-            playBtn.setText("Install/Play");
+            playBtn.setText("Play");
             playBtn.setBackgroundColor(Color.parseColor("#FF2200"));
             playBtn.setTextColor(Color.WHITE);
             playBtn.setOnClickListener(v -> {
@@ -167,25 +169,19 @@ public class StubActivity extends Activity {
             ffItem.addView(playBtn);
             storeContainer.addView(ffItem);
 
-            LinearLayout psItem = new LinearLayout(this);
-            psItem.setOrientation(LinearLayout.HORIZONTAL);
-            psItem.setGravity(Gravity.CENTER_VERTICAL);
-            psItem.setPadding(0, 10, 0, 10);
-
-            TextView psName = new TextView(this);
-            psName.setText("Google Play Store");
-            psName.setTextColor(Color.WHITE);
-            psName.setTextSize(18);
-            psName.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
-            psItem.addView(psName);
-
-            Button openPsBtn = new Button(this);
-            openPsBtn.setText("Open Store");
-            openPsBtn.setBackgroundColor(Color.parseColor("#333333"));
-            openPsBtn.setTextColor(Color.WHITE);
-            openPsBtn.setOnClickListener(v -> openPlayStore());
-            psItem.addView(openPsBtn);
-            storeContainer.addView(psItem);
+            Button copyLogsBtn = new Button(this);
+            copyLogsBtn.setText("COPY LOGS (If Error)");
+            copyLogsBtn.setBackgroundColor(Color.parseColor("#444444"));
+            copyLogsBtn.setTextColor(Color.WHITE);
+            copyLogsBtn.setOnClickListener(v -> {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("TrispyLogs", logStringBuilder.toString());
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(clip);
+                    Toast.makeText(this, "Logs copied to clipboard!", Toast.LENGTH_SHORT).show();
+                }
+            });
+            storeContainer.addView(copyLogsBtn);
 
             rootMainLayout.addView(storeContainer);
 
@@ -222,24 +218,6 @@ public class StubActivity extends Activity {
         }
     }
 
-    private void openPlayStore() {
-        try {
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(Uri.parse("market://details?id=" + targetPackageName));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(intent);
-            log("Opened Play Store");
-        } catch (Exception e) {
-            logError("Play Store not found. Opening browser.");
-            try {
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setData(Uri.parse("https://play.google.com/store/apps/details?id=" + targetPackageName));
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(intent);
-            } catch (Exception ex) {}
-        }
-    }
-
     private void log(final String msg) {
         Log.d(TAG, msg);
         logStringBuilder.append("[*] ").append(msg).append("\n");
@@ -263,7 +241,7 @@ public class StubActivity extends Activity {
         String stackTrace = sw.toString();
         
         String[] lines = stackTrace.split("\n");
-        for (int i = 0; i < Math.min(lines.length, 15); i++) {
+        for (int i = 0; i < Math.min(lines.length, 10); i++) {
             logStringBuilder.append(lines[i]).append("\n");
         }
 
@@ -312,7 +290,7 @@ public class StubActivity extends Activity {
             theUnsafe.setAccessible(true);
             unsafeInstance = theUnsafe.get(null);
             isUnsafeInitialized = true;
-            log("Unsafe memory engine initialized.");
+            log("Unsafe initialized.");
         } catch (Exception e) {
             isUnsafeInitialized = false;
             logError("Failed to init Unsafe: " + e.getMessage());
@@ -333,7 +311,7 @@ public class StubActivity extends Activity {
         
         isEngineInitialized = true;
         log("=========================================");
-        log("ENGINE INITIALIZATION COMPLETE");
+        log("ENGINE INITIALIZED");
         log("=========================================");
     }
 
@@ -386,14 +364,14 @@ public class StubActivity extends Activity {
             Intent intent = getPackageManager().getLaunchIntentForPackage(targetPackageName);
             if (intent != null && intent.getComponent() != null) {
                 targetActivityClassName = intent.getComponent().getClassName();
-                log("Resolved via Intent: " + targetActivityClassName);
+                log("Resolved Activity: " + targetActivityClassName);
                 return;
             }
         } catch (Throwable t) {}
 
         if (targetPackageName.contains("freefire")) {
             targetActivityClassName = FALLBACK_FF_ACTIVITY;
-            log("Resolved via Hardcoded: " + targetActivityClassName);
+            log("Resolved Hardcoded: " + targetActivityClassName);
             return;
         }
 
@@ -484,58 +462,58 @@ public class StubActivity extends Activity {
             
             for (int i = 13; i < paramCount; i++) args[i] = null;
 
-            log("Invoking attach()...");
             attachMethod.invoke(targetActivity, args);
         }
 
         if (isUnsafeInitialized) {
             try {
-                log("Bypassing Application Lifecycle Crash...");
+                log("Bypassing Lifecycle Crash...");
                 
-                // Create a raw, empty Application using Unsafe
                 Application dummyApp = (Application) unsafeClass.getMethod("allocateInstance", Class.class).invoke(unsafeInstance, Application.class);
                 
-                // THE SURGICAL FIX: Inject an Object Lock and List into the Dummy App
-                injectFieldUnsafe(dummyApp, "mActivityLifecycleCallbacksLock", new Object());
-                injectFieldUnsafe(dummyApp, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
+                // FIX 1: Use DummyApp itself as the lock (Cannot be null)
+                forceInjectField(dummyApp, "mActivityLifecycleCallbacksLock", dummyApp);
+                forceInjectField(dummyApp, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
                 
-                // Inject Dummy App into Activity
-                injectFieldUnsafe(targetActivity, "mApplication", dummyApp);
+                // FIX 2: Use TargetActivity itself as the lock (Cannot be null)
+                forceInjectField(targetActivity, "mActivityLifecycleCallbacksLock", targetActivity);
+                forceInjectField(targetActivity, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
                 
-                // Inject Metadata
-                injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
-                injectFieldUnsafe(targetActivity, "mComponent", componentName);
-                injectFieldUnsafe(targetActivity, "mCallingActivity", componentName);
-                injectFieldUnsafe(targetActivity, "mCallingPackage", targetPackageName);
+                // FIX 3: Inject Application & Base Context
+                forceInjectField(targetActivity, "mApplication", dummyApp);
+                forceInjectField(targetActivity, "mBase", sandboxContext);
                 
-                // Inject Threads
-                injectFieldUnsafe(targetActivity, "mBase", sandboxContext);
-                injectFieldUnsafe(targetActivity, "mUiThread", Thread.currentThread());
-                injectFieldUnsafe(targetActivity, "mMainThread", currentActivityThread);
-                injectFieldUnsafe(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
+                // FIX 4: Inject Metadata
+                forceInjectField(targetActivity, "mIntent", targetIntent);
+                forceInjectField(targetActivity, "mComponent", componentName);
+                forceInjectField(targetActivity, "mCallingActivity", componentName);
+                forceInjectField(targetActivity, "mCallingPackage", targetPackageName);
                 
-                log("Lifecycle bypass injected successfully.");
+                // FIX 5: Inject Threads
+                forceInjectField(targetActivity, "mUiThread", Thread.currentThread());
+                forceInjectField(targetActivity, "mMainThread", currentActivityThread);
+                forceInjectField(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
+                
+                log("Lifecycle bypass injected perfectly.");
             } catch (Exception e) {
                 log("Unsafe injection failed: " + e.getMessage());
             }
         }
 
-        log("Invoking onCreate()...");
         realInstrumentation.callActivityOnCreate(targetActivity, null);
 
-        // Restore the real Application after the crash window has passed
+        // Restore real Application after the crash window has passed
         if (isUnsafeInitialized) {
-            injectFieldUnsafe(targetActivity, "mApplication", getApplication());
+            forceInjectField(targetActivity, "mApplication", getApplication());
         }
 
-        log("Setting Content View...");
         setContentView(targetActivity.getWindow().getDecorView());
         
         isActivityLaunched = true;
         log("GAME ENGINE RENDERED!");
     }
 
-    private void injectFieldUnsafe(Object obj, String fieldName, Object value) {
+    private void forceInjectField(Object obj, String fieldName, Object value) {
         try {
             Class<?> clazz = obj.getClass();
             Field field = null;
@@ -554,8 +532,12 @@ public class StubActivity extends Activity {
                 
                 Method putObjectMethod = unsafeClass.getMethod("putObject", Object.class, long.class, Object.class);
                 putObjectMethod.invoke(unsafeInstance, obj, offset, value);
+            } else {
+                log("Field not found: " + fieldName);
             }
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            log("Injection failed for " + fieldName + ": " + e.getMessage());
+        }
     }
 
     private void showFloatingPanel() {
@@ -582,8 +564,6 @@ public class StubActivity extends Activity {
             lp.x = 50;
             lp.y = 300;
 
-            logo.setOnClickListener(v -> Toast.makeText(this, "Panel Clicked!", Toast.LENGTH_SHORT).show());
-
             windowManager.addView(logo, lp);
             floatingPanelView = logo;
         } catch (Throwable t) {}
@@ -598,21 +578,8 @@ public class StubActivity extends Activity {
     public static class HardwareSpoofer {
         public static void spoofHardware() {
             try {
-                setBuildField("MODEL", "SM-S928B");
-                setBuildField("BRAND", "samsung");
-                setBuildField("MANUFACTURER", "samsung");
-                setBuildField("DEVICE", "e3q");
-            } catch (Exception e) {}
-        }
-
-        private static void setBuildField(String fieldName, String value) {
-            try {
-                Field field = Build.class.getDeclaredField(fieldName);
-                field.setAccessible(true);
-                field.set(null, value);
-                Field field2 = Build.VERSION.class.getDeclaredField(fieldName);
-                field2.setAccessible(true);
-                field2.set(null, value);
+                Field field = Build.class.getDeclaredField("MODEL"); field.setAccessible(true); field.set(null, "SM-S928B");
+                Field field2 = Build.class.getDeclaredField("BRAND"); field2.setAccessible(true); field2.set(null, "samsung");
             } catch (Exception e) {}
         }
     }
@@ -627,59 +594,35 @@ public class StubActivity extends Activity {
             try {
                 AssetManager assets = AssetManager.class.newInstance();
                 Method addAssetPath = AssetManager.class.getMethod("addAssetPath", String.class);
-                String apkPath = base.getPackageManager().getApplicationInfo(targetPkg, 0).sourceDir;
-                addAssetPath.invoke(assets, apkPath);
-                Resources hostRes = base.getResources();
-                targetRes = new Resources(assets, hostRes.getDisplayMetrics(), hostRes.getConfiguration());
+                addAssetPath.invoke(assets, base.getPackageManager().getApplicationInfo(targetPkg, 0).sourceDir);
+                targetRes = new Resources(assets, base.getResources().getDisplayMetrics(), base.getResources().getConfiguration());
             } catch (Exception e) {}
         }
 
-        @Override
-        public String getPackageName() { return targetPkg; }
-
-        @Override
-        public Resources getResources() { return targetRes != null ? targetRes : super.getResources(); }
-
-        @Override
-        public Context getApplicationContext() { return getBaseContext().getApplicationContext(); }
-
-        @Override
-        public File getObbDir() {
-            File obb = new File(getBaseContext().getFilesDir(), "TrispyVM_Obb/" + targetPkg);
-            if (!obb.exists()) obb.mkdirs();
-            return obb;
-        }
+        @Override public String getPackageName() { return targetPkg; }
+        @Override public Resources getResources() { return targetRes != null ? targetRes : super.getResources(); }
+        @Override public Context getApplicationContext() { return getBaseContext().getApplicationContext(); }
 
         @Override
         public PackageManager getPackageManager() {
             PackageManager basePm = getBaseContext().getPackageManager();
             return (PackageManager) Proxy.newProxyInstance(
-                PackageManager.class.getClassLoader(),
-                new Class<?>[]{PackageManager.class},
-                new InvocationHandler() {
-                    @Override
-                    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                        String methodName = method.getName();
-                        if (methodName.equals("getLaunchIntentForPackage") && args != null && args.length > 0) {
-                            String pkg = (String) args[0];
-                            if (pkg != null && pkg.equals(targetPkg)) {
-                                Intent intent = new Intent(Intent.ACTION_MAIN);
-                                intent.addCategory(Intent.CATEGORY_LAUNCHER);
-                                intent.setComponent(new ComponentName(targetPkg, "com.dts.freefireth.FFMainActivity"));
-                                return intent;
-                            }
+                PackageManager.class.getClassLoader(), new Class<?>[]{PackageManager.class},
+                (proxy, method, args) -> {
+                    if (method.getName().equals("getLaunchIntentForPackage") && args != null) {
+                        if (targetPkg.equals(args[0])) {
+                            Intent i = new Intent(Intent.ACTION_MAIN);
+                            i.addCategory(Intent.CATEGORY_LAUNCHER);
+                            i.setComponent(new ComponentName(targetPkg, "com.dts.freefireth.FFMainActivity"));
+                            return i;
                         }
-                        if (methodName.equals("getPackageInfo") && args != null && args.length > 0) {
-                            String pkg = (String) args[0];
-                            if (pkg != null && pkg.contains("com.google.android.gms")) {
-                                PackageInfo fakeGms = new PackageInfo();
-                                fakeGms.packageName = pkg;
-                                fakeGms.versionName = "22.0.0";
-                                return fakeGms;
-                            }
-                        }
-                        try { return method.invoke(basePm, args); } catch (InvocationTargetException e) { throw e.getCause(); }
                     }
+                    if (method.getName().equals("getPackageInfo") && args != null) {
+                        if (args[0] != null && args[0].toString().contains("gms")) {
+                            PackageInfo p = new PackageInfo(); p.packageName = args[0].toString(); p.versionName = "22.0.0"; return p;
+                        }
+                    }
+                    try { return method.invoke(basePm, args); } catch (InvocationTargetException e) { throw e.getCause(); }
                 }
             );
         }
