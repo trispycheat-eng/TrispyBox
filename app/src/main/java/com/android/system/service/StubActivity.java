@@ -12,7 +12,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.Signature;
 import android.content.res.AssetManager;
@@ -64,11 +63,6 @@ import java.util.zip.ZipFile;
 
 import dalvik.system.DexClassLoader;
 
-/**
- * =========================================================================================
- * TRISPY VIRTUAL SPACE ENGINE - ULTIMATE APP STORE MONOLITH (COMPILE-SAFE)
- * =========================================================================================
- */
 public class StubActivity extends Activity {
 
     private static final String TAG = "TrispyStoreEngine";
@@ -83,7 +77,6 @@ public class StubActivity extends Activity {
     private DexClassLoader targetClassLoader;
     private SandboxContext sandboxContext;
     
-    // Unchanged: We use Object to bypass the compiler restriction on sun.misc.Unsafe
     private Object unsafeInstance;
     private Class<?> unsafeClass;
     
@@ -148,7 +141,6 @@ public class StubActivity extends Activity {
             title.setTextSize(26);
             title.setTypeface(null, Typeface.BOLD);
             topBar.addView(title);
-
             rootMainLayout.addView(topBar);
 
             storeContainer = new LinearLayout(this);
@@ -509,8 +501,6 @@ public class StubActivity extends Activity {
         Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
         
         Activity targetActivity;
-        
-        // Use Unsafe via Reflection if available, otherwise fallback to newInstance
         if (isUnsafeInitialized) {
             Method allocateInstanceMethod = unsafeClass.getMethod("allocateInstance", Class.class);
             targetActivity = (Activity) allocateInstanceMethod.invoke(unsafeInstance, mainActivityClass);
@@ -531,8 +521,13 @@ public class StubActivity extends Activity {
                 injectFieldUnsafe(targetActivity, "mComponent", componentName);
                 injectFieldUnsafe(targetActivity, "mCallingActivity", componentName);
                 injectFieldUnsafe(targetActivity, "mCallingPackage", targetPackageName);
+                
+                // --- CRITICAL FIX: INJECT APPLICATION AND BASE CONTEXT ---
+                injectFieldUnsafe(targetActivity, "mApplication", getApplication());
+                injectFieldUnsafe(targetActivity, "mBase", sandboxContext);
+                log("Injected Application and Base Context via Unsafe.");
             } catch (Exception e) {
-                log("Unsafe injection partially failed.");
+                log("Unsafe injection partially failed: " + e.getMessage());
             }
         }
 
@@ -699,6 +694,12 @@ public class StubActivity extends Activity {
         @Override
         public Resources getResources() {
             return targetRes != null ? targetRes : super.getResources();
+        }
+
+        @Override
+        public Context getApplicationContext() {
+            // Return host application context to prevent NullPointerExceptions in Unity
+            return getBaseContext().getApplicationContext();
         }
 
         @Override
