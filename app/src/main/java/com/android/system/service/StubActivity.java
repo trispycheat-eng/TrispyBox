@@ -492,12 +492,15 @@ public class StubActivity extends Activity {
             try {
                 log("Bypassing Application Lifecycle Crash...");
                 
-                // Create a raw, empty Application using Unsafe (No custom methods, no compiler errors)
+                // Create a raw, empty Application using Unsafe
                 Application dummyApp = (Application) unsafeClass.getMethod("allocateInstance", Class.class).invoke(unsafeInstance, Application.class);
                 
-                // Inject Dummy App and List to prevent monitor-enter crash
+                // THE SURGICAL FIX: Inject an Object Lock and List into the Dummy App
+                injectFieldUnsafe(dummyApp, "mActivityLifecycleCallbacksLock", new Object());
+                injectFieldUnsafe(dummyApp, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
+                
+                // Inject Dummy App into Activity
                 injectFieldUnsafe(targetActivity, "mApplication", dummyApp);
-                injectFieldUnsafe(targetActivity, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
                 
                 // Inject Metadata
                 injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
