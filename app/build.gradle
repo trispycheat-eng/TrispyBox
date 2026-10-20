@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'com.trispy.space'
+    namespace 'com.android.system.service'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.trispy.space"
+        applicationId "com.android.system.service"
         minSdk 24
         targetSdk 34
         versionCode 1
