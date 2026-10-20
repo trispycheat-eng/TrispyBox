@@ -484,12 +484,24 @@ public class StubActivity extends Activity {
         }
 
         log("Invoking onCreate() directly (Skipping Android internal locks)...");
-        try {
-            Method onCreateMethod = targetActivity.getClass().getMethod("onCreate", Bundle.class);
+        
+        // THE FIX: getDeclaredMethod instead of getMethod, and walk up the class hierarchy
+        Method onCreateMethod = null;
+        Class<?> clazz = targetActivity.getClass();
+        while (clazz != null) {
+            try {
+                onCreateMethod = clazz.getDeclaredMethod("onCreate", Bundle.class);
+                break;
+            } catch (NoSuchMethodException e) {
+                clazz = clazz.getSuperclass();
+            }
+        }
+        
+        if (onCreateMethod != null) {
+            onCreateMethod.setAccessible(true);
             onCreateMethod.invoke(targetActivity, (Bundle) null);
-        } catch (NoSuchMethodException e) {
-            Method onCreateMethod = Activity.class.getMethod("onCreate", Bundle.class);
-            onCreateMethod.invoke(targetActivity, (Bundle) null);
+        } else {
+            logError("Could not find onCreate method");
         }
 
         // Restore real Application
