@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#121212">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="#1E1E1E"
+        android:title="Settings"
+        android:titleTextColor="#FFFFFF"/>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ROOT & MAGISK"
+                android:textColor="#FF2200"
+                android:textStyle="bold"
+                android:layout_marginBottom="16dp"/>
+
+            <Switch
+                android:id="@+id/switch_root"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Enable Root (SuperSU)"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:padding="12dp"/>
+
+            <Switch
+                android:id="@+id/switch_magisk"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Enable Magisk / Zygisk"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:padding="12dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="VM LOGS"
+                android:textColor="#FF2200"
+                android:textStyle="bold"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:id="@+id/txt_logs"
+                android:layout_width="match_parent"
+                android:layout_height="300dp"
+                android:background="#1E1E1E"
+                android:textColor="#00FF00"
+                android:fontFamily="monospace"
+                android:textSize="12sp"
+                android:padding="8dp"
+                android:scrollbars="vertical"/>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
