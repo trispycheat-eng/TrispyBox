@@ -24,12 +24,14 @@ public class VirtualCore {
         this.hostContext = context;
         try {
             System.loadLibrary("trispy_native");
+            Log.d("TrispySpace", "Native loaded.");
         } catch (Throwable t) {
             Log.e("TrispySpace", "Native load failed: " + t.getMessage());
         }
         
         try {
             hookInstrumentation();
+            Log.d("TrispySpace", "Instrumentation hooked successfully.");
         } catch (Throwable t) {
             Log.e("TrispySpace", "Hook failed: " + t.getMessage());
         }
@@ -57,7 +59,6 @@ public class VirtualCore {
         instrumentationField.setAccessible(true);
         Instrumentation originalInstrumentation = (Instrumentation) instrumentationField.get(currentActivityThread);
 
-        // Custom Instrumentation without @Override to bypass compiler
         Instrumentation proxyInstrumentation = new Instrumentation() {
             public ActivityResult execStartActivity(
                     Context who, IBinder contextThread, IBinder token, Activity target,
@@ -68,17 +69,18 @@ public class VirtualCore {
                     if (pkg.equals(targetPackage)) {
                         Log.d("TrispySpace", "HOOKED! Redirecting " + targetPackage + " to StubActivity.");
                         
-                        // Change the intent to open our StubActivity
-                        intent.setClassName(hostContext, "com.android.system.service.StubActivity");
-                        intent.putExtra("TRISPY_TARGET_PKG", pkg);
+                        // FIX: Use String to reference StubActivity instead of Class reference
+                        android.content.ComponentName componentName = new android.content.ComponentName(
+                                hostContext.getPackageName(), 
+                                "com.android.system.service.StubActivity"
+                        );
                         
-                        // Clear the component so the system doesn't try to resolve FF Max
-                        intent.setComponent(new android.content.ComponentName(hostContext, com.android.system.service.StubActivity.class));
+                        intent.setComponent(componentName);
+                        intent.putExtra("TRISPY_TARGET_PKG", pkg);
                     }
                 }
                 
                 try {
-                    // Call the original method using Reflection to avoid compile errors
                     Method method = Instrumentation.class.getDeclaredMethod("execStartActivity", 
                         Context.class, IBinder.class, IBinder.class, Activity.class, Intent.class, int.class, Bundle.class);
                     method.setAccessible(true);
