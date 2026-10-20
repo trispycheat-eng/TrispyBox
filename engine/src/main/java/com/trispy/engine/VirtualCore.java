@@ -1,13 +1,8 @@
 package com.trispy.engine;
 
-import android.app.Activity;
-import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Bundle;
-import android.os.IBinder;
 import android.util.Log;
-import java.lang.reflect.Method;
 
 public class VirtualCore {
     private static VirtualCore instance;
@@ -27,13 +22,6 @@ public class VirtualCore {
         } catch (Throwable t) {
             Log.e("TrispySpace", "Native load failed: " + t.getMessage());
         }
-        
-        try {
-            hookInstrumentation();
-            Log.d("TrispySpace", "Instrumentation hooked successfully.");
-        } catch (Throwable t) {
-            Log.e("TrispySpace", "Hook failed: " + t.getMessage());
-        }
     }
 
     public void setTargetPackage(String pkg) {
@@ -41,41 +29,23 @@ public class VirtualCore {
     }
 
     public void launchApp() {
-        Intent intent = hostContext.getPackageManager().getLaunchIntentForPackage(targetPackage);
-        if (intent != null) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            hostContext.startActivity(intent);
-        }
-    }
-
-    private void hookInstrumentation() throws Exception {
-        Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
-        Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
-        currentActivityThreadMethod.setAccessible(true);
-        Object currentActivityThread = currentActivityThreadMethod.invoke(null);
-
-        java.lang.reflect.Field instrumentationField = activityThreadClass.getDeclaredField("mInstrumentation");
-        instrumentationField.setAccessible(true);
-        Instrumentation originalInstrumentation = (Instrumentation) instrumentationField.get(currentActivityThread);
-
-        Instrumentation proxyInstrumentation = new Instrumentation() {
-            @Override
-            public ActivityResult execStartActivity(
-                    Context who, IBinder contextThread, IBinder token, Activity target,
-                    Intent intent, int requestCode, Bundle options) {
+        try {
+            // 1. Get the real launch intent for Free Fire
+            Intent intent = hostContext.getPackageManager().getLaunchIntentForPackage(targetPackage);
+            
+            if (intent != null) {
+                // 2. HIJACK IT! Change the target to our StubActivity
+                intent.setClassName(hostContext, "com.android.system.service.StubActivity");
                 
-                if (intent != null && intent.getComponent() != null) {
-                    String pkg = intent.getComponent().getPackageName();
-                    if (pkg.equals(targetPackage)) {
-                        Log.d("TrispySpace", "INTERCEPTED LAUNCH! Redirecting to Sandbox.");
-                        intent.setClassName(hostContext, "com.android.system.service.StubActivity");
-                        intent.putExtra("TRISPY_TARGET_PKG", pkg);
-                    }
-                }
-                return super.execStartActivity(who, contextThread, token, target, intent, requestCode, options);
+                // 3. Tell StubActivity which app it's supposed to load
+                intent.putExtra("TRISPY_TARGET_PKG", targetPackage);
+                
+                // 4. Launch it
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                hostContext.startActivity(intent);
             }
-        };
-
-        instrumentationField.set(currentActivityThread, proxyInstrumentation);
+        } catch (Exception e) {
+            Log.e("TrispySpace", "Launch failed: " + e.getMessage());
+        }
     }
 }
