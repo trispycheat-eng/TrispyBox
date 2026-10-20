@@ -30,7 +30,6 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -289,13 +288,20 @@ public class StubActivity extends Activity {
         extractNativeLibraries();
         resolveTargetActivity();
         setupEnvironment();
-        launchVirtualActivity();
-        showFloatingPanel();
         
-        isEngineInitialized = true;
-        log("=========================================");
-        log("ENGINE INITIALIZED");
-        log("=========================================");
+        // THE FIX: Switch to UI thread before creating the Activity
+        runOnUiThread(() -> {
+            try {
+                launchVirtualActivity();
+                showFloatingPanel();
+                isEngineInitialized = true;
+                log("=========================================");
+                log("ENGINE INITIALIZED");
+                log("=========================================");
+            } catch (Throwable t) {
+                logFatalError("LAUNCH CRASH ON UI THREAD", t);
+            }
+        });
     }
 
     private void resolveApplicationInfo() throws PackageManager.NameNotFoundException {
@@ -404,7 +410,6 @@ public class StubActivity extends Activity {
         
         Activity targetActivity;
         try {
-            // We instantiate normally so Realme hooks are applied
             targetActivity = (Activity) mainActivityClass.newInstance();
         } catch (Throwable t) {
             targetActivity = (Activity) mainActivityClass.newInstance();
@@ -448,12 +453,10 @@ public class StubActivity extends Activity {
             attachMethod.invoke(targetActivity, args);
         }
 
-        // INJECT EVERYTHING BEFORE ONCREATE
         log("Injecting Bypass Environment...");
         
         Application dummyApp = (Application) Class.forName("sun.misc.Unsafe").getMethod("allocateInstance", Class.class).invoke(getUnsafeInstance(), Application.class);
         
-        // 1. Inject Context & Thread
         VirtualWindowHelper.forceInjectField(targetActivity, "mBase", sandboxContext);
         VirtualWindowHelper.forceInjectField(targetActivity, "mApplication", dummyApp);
         VirtualWindowHelper.forceInjectField(targetActivity, "mIntent", targetIntent);
@@ -464,10 +467,8 @@ public class StubActivity extends Activity {
         VirtualWindowHelper.forceInjectField(targetActivity, "mMainThread", currentActivityThread);
         VirtualWindowHelper.forceInjectField(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
 
-        // 2. Inject Realme IActivityExt Proxy to prevent checkViewCacheThread crash
         RealmeBypass.inject(targetActivity);
 
-        // 3. Inject Window
         try {
             Class<?> phoneWindowClass = Class.forName("com.android.internal.policy.PhoneWindow");
             Constructor<?> windowConstructor = phoneWindowClass.getConstructor(Context.class);
