@@ -467,32 +467,15 @@ public class StubActivity extends Activity {
 
         if (isUnsafeInitialized) {
             try {
-                log("Bypassing Lifecycle Crash...");
-                
+                log("Injecting Application context...");
                 Application dummyApp = (Application) unsafeClass.getMethod("allocateInstance", Class.class).invoke(unsafeInstance, Application.class);
                 
-                // FIX 1: Use DummyApp itself as the lock (Cannot be null)
-                forceInjectField(dummyApp, "mActivityLifecycleCallbacksLock", dummyApp);
-                forceInjectField(dummyApp, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
-                
-                // FIX 2: Use TargetActivity itself as the lock (Cannot be null)
-                forceInjectField(targetActivity, "mActivityLifecycleCallbacksLock", targetActivity);
-                forceInjectField(targetActivity, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
-                
-                // FIX 3: Inject Application & Base Context
+                // Inject Dummy App
                 forceInjectField(targetActivity, "mApplication", dummyApp);
-                forceInjectField(targetActivity, "mBase", sandboxContext);
                 
-                // FIX 4: Inject Metadata
+                // Inject Intent and Component
                 forceInjectField(targetActivity, "mIntent", targetIntent);
                 forceInjectField(targetActivity, "mComponent", componentName);
-                forceInjectField(targetActivity, "mCallingActivity", componentName);
-                forceInjectField(targetActivity, "mCallingPackage", targetPackageName);
-                
-                // FIX 5: Inject Threads
-                forceInjectField(targetActivity, "mUiThread", Thread.currentThread());
-                forceInjectField(targetActivity, "mMainThread", currentActivityThread);
-                forceInjectField(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
                 
                 log("Lifecycle bypass injected perfectly.");
             } catch (Exception e) {
@@ -500,9 +483,16 @@ public class StubActivity extends Activity {
             }
         }
 
-        realInstrumentation.callActivityOnCreate(targetActivity, null);
+        log("Invoking onCreate() directly (Skipping Android internal locks)...");
+        try {
+            Method onCreateMethod = targetActivity.getClass().getMethod("onCreate", Bundle.class);
+            onCreateMethod.invoke(targetActivity, (Bundle) null);
+        } catch (NoSuchMethodException e) {
+            Method onCreateMethod = Activity.class.getMethod("onCreate", Bundle.class);
+            onCreateMethod.invoke(targetActivity, (Bundle) null);
+        }
 
-        // Restore real Application after the crash window has passed
+        // Restore real Application
         if (isUnsafeInitialized) {
             forceInjectField(targetActivity, "mApplication", getApplication());
         }
