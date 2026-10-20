@@ -1,6 +1,7 @@
 package com.android.system.service;
 
 import android.app.Activity;
+import android.app.Application;
 import android.app.Instrumentation;
 import android.content.ComponentName;
 import android.content.Context;
@@ -45,6 +46,7 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -486,10 +488,10 @@ public class StubActivity extends Activity {
             attachMethod.invoke(targetActivity, args);
         }
 
-        // --- THE REAL FIX: INJECT METADATA AFTER ATTACH, BEFORE ONCREATE ---
+        // --- THE REAL FIX: INJECT INTERNAL LISTS ---
         if (isUnsafeInitialized) {
             try {
-                log("Injecting critical metadata via Unsafe...");
+                log("Injecting critical metadata & lists via Unsafe...");
                 
                 injectFieldUnsafe(targetActivity, "mIntent", targetIntent);
                 injectFieldUnsafe(targetActivity, "mComponent", componentName);
@@ -503,7 +505,12 @@ public class StubActivity extends Activity {
                 injectFieldUnsafe(targetActivity, "mMainThread", currentActivityThread);
                 injectFieldUnsafe(targetActivity, "mHandler", new Handler(Looper.getMainLooper()));
                 
-                log("Metadata injection complete.");
+                // FIX FOR MONITOR-ENTER CRASH
+                injectFieldUnsafe(targetActivity, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
+                injectFieldUnsafe(targetActivity, "mManagedCursors", new ArrayList<Object>());
+                injectFieldUnsafe(targetActivity, "mFragments", null); 
+                
+                log("Metadata and lists injection complete.");
             } catch (Exception e) {
                 log("Unsafe injection failed: " + e.getMessage());
             }
