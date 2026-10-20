@@ -2,6 +2,7 @@ package com.android.system.service;
 
 import android.app.Activity;
 import android.app.Application;
+import android.app.Instrumentation;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
@@ -31,7 +32,7 @@ public class StubActivity extends Activity {
                 apkPath, dexOutputDir.getAbsolutePath(), nativeLibPath, getClassLoader()
             );
             
-            // 2. Setup the Fake Context (Resources + Package Name)
+            // 2. Setup the Fake Context
             SandboxContext sandboxContext = new SandboxContext(this, targetPkg);
             
             // 3. Load the Game Class
@@ -42,7 +43,17 @@ public class StubActivity extends Activity {
             // 4. Create Instance
             Activity targetActivity = (Activity) mainActivityClass.newInstance();
             
-            // 5. Dynamically find the attach method (Fixes NoSuchMethodException)
+            // 5. Get the REAL ActivityThread and Instrumentation
+            Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
+            Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
+            currentActivityThreadMethod.setAccessible(true);
+            Object realActivityThread = currentActivityThreadMethod.invoke(null);
+            
+            Method getInstrumentationMethod = activityThreadClass.getDeclaredMethod("getInstrumentation");
+            getInstrumentationMethod.setAccessible(true);
+            Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(realActivityThread);
+
+            // 6. Dynamically find the attach method
             Method attachMethod = null;
             for (Method m : Activity.class.getDeclaredMethods()) {
                 if (m.getName().equals("attach")) {
@@ -53,47 +64,42 @@ public class StubActivity extends Activity {
             
             if (attachMethod != null) {
                 attachMethod.setAccessible(true);
-                // We pass a null Instrumentation and empty strings to fill the required parameters.
-                // This bypasses the Android 11+ hidden API block.
                 Object[] args = new Object[attachMethod.getParameterCount()];
-                args[0] = sandboxContext; // Context
-                args[1] = null; // ActivityThread
-                args[2] = null; // Instrumentation
-                args[3] = null; // IBinder
+                
+                // Fill with REAL objects instead of nulls
+                args[0] = sandboxContext; 
+                args[1] = realActivityThread; // REAL ActivityThread
+                args[2] = realInstrumentation; // REAL Instrumentation
+                args[3] = null; // IBinder (can be null for now)
                 args[4] = 0;    // int
                 args[5] = getApplication(); // Application
                 args[6] = launchIntent; // Intent
                 args[7] = null; // ActivityInfo
                 args[8] = "";   // CharSequence
-                args[9] = null; // Activity (Parent)
+                args[9] = null; // Activity
                 args[10] = "";  // String
                 args[11] = null; // Object
                 args[12] = null; // Object
                 
-                // If the signature is shorter (older Android), fill the rest with nulls.
                 for (int i = 13; i < args.length; i++) {
                     args[i] = null;
                 }
                 
-                try {
-                    attachMethod.invoke(targetActivity, args);
-                } catch (Exception e) {
-                    Log.e("TrispySpace", "Attach failed: " + e.getMessage());
-                }
+                attachMethod.invoke(targetActivity, args);
             }
             
-            // 6. Call onCreate
+            // 7. Call onCreate
             Method onCreate = Activity.class.getDeclaredMethod("onCreate", Bundle.class);
             onCreate.setAccessible(true);
             onCreate.invoke(targetActivity, savedInstanceState);
             
-            // 7. Show the game!
+            // 8. Show the game!
             setContentView(targetActivity.getWindow().getDecorView());
 
         } catch (Throwable t) {
             Log.e("TrispySpace", "Virtual load failed", t);
             TextView tv = new TextView(this);
-            tv.setText("VIRTUAL SPACE ERROR:\n" + t.getMessage() + "\n\nIf it says 'attach', we need to fix the parameter count.");
+            tv.setText("VIRTUAL SPACE ERROR:\n" + t.toString() + "\n\nIf it says 'Resources', the SandboxContext needs fixing.");
             tv.setTextColor(Color.RED);
             tv.setTextSize(14);
             tv.setPadding(50, 50, 50, 50);
