@@ -492,30 +492,10 @@ public class StubActivity extends Activity {
             try {
                 log("Bypassing Application Lifecycle Crash...");
                 
-                // Create a dummy Application that does nothing to bypass the crash
-                Application dummyApp = new Application() {
-                    @Override public void dispatchActivityPreCreated(Activity activity, Bundle savedInstanceState) {}
-                    @Override public void dispatchActivityCreated(Activity activity, Bundle savedInstanceState) {}
-                    @Override public void dispatchActivityStarted(Activity activity) {}
-                    @Override public void dispatchActivityResumed(Activity activity) {}
-                    @Override public void dispatchActivityPaused(Activity activity) {}
-                    @Override public void dispatchActivityStopped(Activity activity) {}
-                    @Override public void dispatchActivitySaveInstanceState(Activity activity, Bundle outState) {}
-                    @Override public void dispatchActivityPostCreated(Activity activity, Bundle savedInstanceState) {}
-                    @Override public void dispatchActivityPostStarted(Activity activity) {}
-                    @Override public void dispatchActivityPostResumed(Activity activity) {}
-                    @Override public void dispatchActivityPrePaused(Activity activity) {}
-                    @Override public void dispatchActivityPreStopped(Activity activity) {}
-                    @Override public void dispatchActivityPreSaveInstanceState(Activity activity, Bundle outState) {}
-                    @Override public void dispatchActivityPreDestroyed(Activity activity) {}
-                    @Override public void dispatchActivityDestroyed(Activity activity) {}
-                    @Override public void dispatchActivityPostPaused(Activity activity) {}
-                    @Override public void dispatchActivityPostStopped(Activity activity) {}
-                    @Override public void dispatchActivityPostSaveInstanceState(Activity activity, Bundle outState) {}
-                    @Override public void dispatchActivityPostDestroyed(Activity activity) {}
-                };
+                // Create a raw, empty Application using Unsafe (No custom methods, no compiler errors)
+                Application dummyApp = (Application) unsafeClass.getMethod("allocateInstance", Class.class).invoke(unsafeInstance, Application.class);
                 
-                // Inject Dummy App and List
+                // Inject Dummy App and List to prevent monitor-enter crash
                 injectFieldUnsafe(targetActivity, "mApplication", dummyApp);
                 injectFieldUnsafe(targetActivity, "mActivityLifecycleCallbacks", new ArrayList<Application.ActivityLifecycleCallbacks>());
                 
