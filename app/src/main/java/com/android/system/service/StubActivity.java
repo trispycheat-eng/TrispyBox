@@ -22,44 +22,34 @@ public class StubActivity extends Activity {
         showText("VIRTUAL SPACE INITIALIZING...\nTarget: " + targetPkg);
 
         try {
-            // 1. Get real app info
             ApplicationInfo appInfo = getPackageManager().getApplicationInfo(targetPkg, 0);
             String apkPath = appInfo.sourceDir;
             
-            // 2. Extract Native Libs (using the class we created)
             File extractedLibs = NativeLibraryExtractor.extractLibs(this, apkPath, targetPkg);
             
-            // 3. Setup Sandbox Context and ClassLoader
             SandboxContext sandboxContext = new SandboxContext(this, targetPkg);
             File dexOutputDir = getDir("dex_" + targetPkg, 0);
             DexClassLoader classLoader = new DexClassLoader(
                 apkPath, dexOutputDir.getAbsolutePath(), extractedLibs.getAbsolutePath(), getClassLoader()
             );
             
-            // 4. Get the real launcher activity
             Intent launchIntent = getPackageManager().getLaunchIntentForPackage(targetPkg);
-            String actualActivityName = launchIntent.getComponent().getClassName();
             ActivityInfo actInfo = getPackageManager().getActivityInfo(launchIntent.getComponent(), 0);
             
-            // 5. Setup Unsafe via Reflection to bypass constructor
             Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
             Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
             theUnsafe.setAccessible(true);
             Object unsafeInstance = theUnsafe.get(null);
             Method allocateInstanceMethod = unsafeClass.getMethod("allocateInstance", Class.class);
 
-            // 6. Setup ActivityThread via Reflection
             Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
             Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
             currentActivityThreadMethod.setAccessible(true);
             Object currentActivityThread = currentActivityThreadMethod.invoke(null);
 
             Class<?> recordClass = Class.forName("android.app.ActivityThread$ActivityClientRecord");
-            
-            // Allocate record without calling constructor
             Object record = allocateInstanceMethod.invoke(unsafeInstance, recordClass);
             
-            // 7. Set fields using Reflection
             Field intentField = recordClass.getDeclaredField("intent");
             intentField.setAccessible(true);
             intentField.set(record, launchIntent);
@@ -72,16 +62,35 @@ public class StubActivity extends Activity {
             tokenField.setAccessible(true);
             tokenField.set(record, new android.os.Binder());
 
-            // 8. Call performLaunchActivity
-            Method performLaunchActivityMethod = activityThreadClass.getDeclaredMethod("performLaunchActivity", recordClass, null);
-            performLaunchActivityMethod.setAccessible(true);
+            // --- FIXED METHOD REFLECTION ---
+            Method performLaunchActivityMethod = null;
+            for (Method m : activityThreadClass.getDeclaredMethods()) {
+                if (m.getName().equals("performLaunchActivity")) {
+                    performLaunchActivityMethod = m;
+                    break;
+                }
+            }
             
-            Activity targetActivity = (Activity) performLaunchActivityMethod.invoke(currentActivityThread, record, null);
-            
-            if (targetActivity != null) {
-                showText("SUCCESS!\nActivity Launched: " + targetActivity.getClass().getSimpleName());
+            if (performLaunchActivityMethod != null) {
+                performLaunchActivityMethod.setAccessible(true);
+                
+                // Handle Android version differences (1 arg vs 2 args)
+                Object[] args;
+                if (performLaunchActivityMethod.getParameterCount() == 1) {
+                    args = new Object[]{record};
+                } else {
+                    args = new Object[]{record, null};
+                }
+
+                Activity targetActivity = (Activity) performLaunchActivityMethod.invoke(currentActivityThread, args);
+                
+                if (targetActivity != null) {
+                    showText("SUCCESS!\nActivity Launched: " + targetActivity.getClass().getSimpleName());
+                } else {
+                    showText("ERROR: performLaunchActivity returned null.");
+                }
             } else {
-                showText("ERROR: performLaunchActivity returned null.");
+                showText("ERROR: performLaunchActivity method not found.");
             }
 
         } catch (Throwable t) {
@@ -100,4 +109,4 @@ public class StubActivity extends Activity {
         tv.setBackgroundColor(Color.BLACK);
         setContentView(tv);
     }
-        }
+}
