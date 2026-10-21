@@ -34,7 +34,7 @@ android {
 }
 
 dependencies {
-    // THE CORRECT DEPENDENCY FOR THE 2.1.0 RELEASE
-    implementation 'com.github.FBlackBox:BlackBox:2.1.0'
+    // LOCAL PROJECT LINK
+    implementation project(':BlackBox')
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
