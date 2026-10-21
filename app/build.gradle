@@ -34,6 +34,7 @@ android {
 }
 
 dependencies {
-    implementation 'top.niunaijun:blackbox:1.0.4'
+    // Link the local BlackBox engine module
+    implementation project(':BlackBox')
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
