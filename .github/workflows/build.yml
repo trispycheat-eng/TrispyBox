@@ -39,55 +39,59 @@ jobs:
         fi
         rm -rf BlackBox_tmp
 
-    - name: Patch Bcore Gradle (Engine)
+    - name: Patch All BlackBox Modules
       run: |
         python3 - << 'EOF'
         import os
+        import glob
         import re
 
-        module_gradle = 'BlackBox/Bcore/build.gradle'
-        
-        if not os.path.exists(module_gradle):
-            print("ERROR: Could not find BlackBox/Bcore/build.gradle")
-            exit(1)
+        # Patch all build.gradle files inside BlackBox
+        build_files = glob.glob('BlackBox/*/build.gradle')
+        build_files.append('BlackBox/build.gradle') # Include root just in case
 
-        with open(module_gradle, 'r') as f:
-            content = f.read()
+        for module_gradle in build_files:
+            if not os.path.exists(module_gradle): continue
+            
+            print(f"Patching {module_gradle}...")
+            with open(module_gradle, 'r') as f:
+                content = f.read()
 
-        # 1. Force Library
-        content = content.replace("com.android.application", "com.android.library")
-        
-        # 2. Remove applicationId
-        content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
-        
-        # 3. Fix jcenter
-        content = content.replace('jcenter()', 'mavenCentral()')
-        
-        # 4. Brutally replace SDK lines
-        content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 34', content)
-        content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
-        content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 34', content)
+            # 1. Force Library (not app)
+            content = content.replace("com.android.application", "com.android.library")
+            
+            # 2. Remove applicationId
+            content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
+            
+            # 3. Fix jcenter
+            content = content.replace('jcenter()', 'mavenCentral()')
+            
+            # 4. Brutally replace SDK lines
+            content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 34', content)
+            content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
+            content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 34', content)
 
-        # 5. THE FIX: Replace the missing global variable with 'true'
-        content = content.replace('rootProject.ext.blackReflection', 'true')
-        
-        # Also replace any other rootProject.ext just in case
-        content = content.replace('rootProject.ext.compileSdkVersion', '34')
-        content = content.replace('rootProject.ext.minSdkVersion', '26')
-        content = content.replace('rootProject.ext.targetSdkVersion', '34')
+            # 5. THE FIX: Replace the missing rootProject.ext variable with the actual module path
+            content = content.replace('rootProject.ext.blackReflection', "project(':black-reflection')")
+            
+            # Replace other rootProject.ext just in case
+            content = content.replace('rootProject.ext.compileSdkVersion', '34')
+            content = content.replace('rootProject.ext.minSdkVersion', '26')
+            content = content.replace('rootProject.ext.targetSdkVersion', '34')
 
-        # 6. Fix Kotlin Plugin
-        content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
-        content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
+            # 6. Fix Kotlin Plugin
+            content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
+            content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-        # 7. Add namespace
-        if 'namespace ' not in content:
-            content = content.replace('android {', 'android {\n    namespace "top.niunaijun.bcore"')
+            # 7. Add namespace if missing
+            if 'namespace ' not in content and 'android {' in content:
+                module_name = os.path.basename(os.path.dirname(module_gradle))
+                content = content.replace('android {', f'android {{\n    namespace "top.niunaijun.{module_name}"')
 
-        with open(module_gradle, 'w') as f:
-            f.write(content)
+            with open(module_gradle, 'w') as f:
+                f.write(content)
 
-        print("Patched BlackBox/Bcore/build.gradle successfully.")
+        print("All modules patched successfully.")
         EOF
 
     - name: Force AndroidX and Jetifier
