@@ -1,149 +1,159 @@
 package com.android.system.service;
 
+import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
-import android.net.Uri;
-import android.os.Build;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.os.Bundle;
-import android.os.Environment;
-import android.provider.Settings;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.GridLayout;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
 import android.widget.Toast;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
-import androidx.recyclerview.widget.GridLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.trispy.engine.VirtualCore;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
-    private RecyclerView recyclerView;
-    private AppListAdapter adapter;
-    private List<PackageInfo> appList = new ArrayList<>();
-    private String pendingPackage = "";
+public class MainActivity extends Activity {
+
+    private LinearLayout mainContainer;
+    private GridLayout appGrid;
+    private LinearLayout topBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-
-        recyclerView = findViewById(R.id.recycler_apps);
-        recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
-        loadInstalledApps();
-
-        adapter = new AppListAdapter(this, appList, pkg -> {
-            // 1. Ask for Overlay Permission
-            if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
-                pendingPackage = pkg.packageName;
-                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
-                startActivityForResult(intent, 1002);
-                return;
-            }
-            
-            // 2. Ask for All Files Access (For OBB)
-            if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
-                pendingPackage = pkg.packageName;
-                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + getPackageName()));
-                startActivityForResult(intent, 1003);
-                return;
-            }
-
-            // 3. Launch
-            launchTarget(pkg.packageName);
-        });
-        recyclerView.setAdapter(adapter);
-
-        Button settingsBtn = findViewById(R.id.btn_settings);
-        settingsBtn.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
-
-        Button filesBtn = findViewById(R.id.btn_files);
-        filesBtn.setOnClickListener(v -> startActivity(new Intent(this, FileManagerActivity.class)));
-
-        FloatingActionButton fabAdd = findViewById(R.id.fab_add);
-        fabAdd.setOnClickListener(v -> {
-            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-            intent.setType("*/*");
-            startActivityForResult(intent, 1001);
-        });
+        buildHomeScreen();
     }
 
-    private void launchTarget(String pkg) {
-        Toast.makeText(this, "Injecting " + pkg + "...", Toast.LENGTH_SHORT).show();
-        VirtualCore.get().setTargetPackage(pkg);
-        VirtualCore.get().launchApp();
-    }
+    private void buildHomeScreen() {
+        // Main Wrapper
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#0F0F0F")); // Deep dark
+        root.setPadding(20, 40, 20, 20);
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
+        // Top Bar (Battery, Time, Settings)
+        topBar = new LinearLayout(this);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
         
-        // If Overlay was granted
-        if (requestCode == 1002) {
-            if (Build.VERSION.SDK_INT >= 23 && Settings.canDrawOverlays(this)) {
-                if (!pendingPackage.isEmpty()) {
-                    // Now check for OBB permission
-                    if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
-                        Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + getPackageName()));
-                        startActivityForResult(intent, 1003);
-                    } else {
-                        launchTarget(pendingPackage);
-                    }
-                }
-            } else {
-                Toast.makeText(this, "Overlay permission is required!", Toast.LENGTH_LONG).show();
-            }
-        }
+        TextView time = new TextView(this);
+        time.setText("10:45 AM");
+        time.setTextColor(Color.WHITE);
+        time.setTextSize(16);
+        time.setTypeface(null, Typeface.BOLD);
+        topBar.addView(time, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
 
-        // If OBB/All Files Access was granted
-        if (requestCode == 1003) {
-            if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) {
-                if (!pendingPackage.isEmpty()) launchTarget(pendingPackage);
-            } else {
-                Toast.makeText(this, "All Files Access is required for OBB!", Toast.LENGTH_LONG).show();
-            }
-        }
+        Button settingsBtn = new Button(this);
+        settingsBtn.setText("⚙ ZYGISK");
+        settingsBtn.setTextColor(Color.parseColor("#FF2200"));
+        settingsBtn.setBackgroundColor(Color.TRANSPARENT);
+        settingsBtn.setOnClickListener(v -> showRootSettings());
+        topBar.addView(settingsBtn);
         
-        // File Picker Result
-        if (requestCode == 1001 && resultCode == RESULT_OK && data != null) {
-            Uri fileUri = data.getData();
-            if (fileUri != null) {
-                try {
-                    File vmDir = new File(getFilesDir(), "TrispyVM/Apps");
-                    if (!vmDir.exists()) vmDir.mkdirs();
-                    File destFile = new File(vmDir, "imported_app.apk");
-                    InputStream is = getContentResolver().openInputStream(fileUri);
-                    FileOutputStream fos = new FileOutputStream(destFile);
-                    byte[] buffer = new byte[1024];
-                    int len;
-                    while ((len = is.read(buffer)) > 0) {
-                        fos.write(buffer, 0, len);
-                    }
-                    fos.close();
-                    is.close();
-                    Toast.makeText(this, "File added to VM!", Toast.LENGTH_SHORT).show();
-                } catch (Exception e) {
-                    Toast.makeText(this, "Failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                }
-            }
-        }
+        root.addView(topBar);
+
+        // Main Inner Screen (VPhone Style)
+        mainContainer = new LinearLayout(this);
+        mainContainer.setOrientation(LinearLayout.VERTICAL);
+        mainContainer.setBackgroundColor(Color.parseColor("#1A1A1A"));
+        mainContainer.setPadding(20, 20, 20, 20);
+        LinearLayout.LayoutParams innerParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f);
+        innerParams.setMargins(0, 30, 0, 30);
+        mainContainer.setLayoutParams(innerParams);
+        mainContainer.setBackgroundResource(android.R.drawable.dialog_holo_dark_frame); // borders
+
+        // App Grid
+        appGrid = new GridLayout(this);
+        appGrid.setColumnCount(4);
+        appGrid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
+        
+        // Fake Apps for realism
+        addAppIcon("Settings", "#555555");
+        addAppIcon("Camera", "#0055FF");
+        addAppIcon("Gallery", "#FFAA00");
+        addAppIcon("Play Store", "#00FF00");
+
+        mainContainer.addView(appGrid);
+        root.addView(mainContainer);
+
+        // Bottom Dock (Free Fire and Files)
+        LinearLayout dock = new LinearLayout(this);
+        dock.setOrientation(LinearLayout.HORIZONTAL);
+        dock.setGravity(Gravity.CENTER);
+        dock.setPadding(0, 20, 0, 20);
+
+        Button playStoreBtn = new Button(this);
+        playStoreBtn.setText("Play Store");
+        playStoreBtn.setBackgroundColor(Color.parseColor("#00FF00"));
+        playStoreBtn.setTextColor(Color.BLACK);
+        playStoreBtn.setOnClickListener(v -> openPlayStore());
+
+        Button ffBtn = new Button(this);
+        ffBtn.setText("Free Fire MAX");
+        ffBtn.setBackgroundColor(Color.parseColor("#FF2200"));
+        ffBtn.setTextColor(Color.WHITE);
+        ffBtn.setOnClickListener(v -> launchFreeFire());
+
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+        btnParams.setMargins(10, 0, 10, 0);
+        
+        dock.addView(playStoreBtn, btnParams);
+        dock.addView(ffBtn, btnParams);
+        
+        root.addView(dock);
+
+        setContentView(root);
     }
 
-    private void loadInstalledApps() {
-        List<PackageInfo> packages = getPackageManager().getInstalledPackages(0);
-        for (PackageInfo pkg : packages) {
-            if ((pkg.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
-                appList.add(pkg);
-            }
-        }
+    private void addAppIcon(String name, String colorHex) {
+        LinearLayout appWrapper = new LinearLayout(this);
+        appWrapper.setOrientation(LinearLayout.VERTICAL);
+        appWrapper.setGravity(Gravity.CENTER);
+        appWrapper.setPadding(10, 10, 10, 10);
+
+        TextView icon = new TextView(this);
+        icon.setText(name.substring(0, 1));
+        icon.setTextColor(Color.WHITE);
+        icon.setTextSize(24);
+        icon.setGravity(Gravity.CENTER);
+        icon.setBackgroundColor(Color.parseColor(colorHex));
+        icon.setWidth(120);
+        icon.setHeight(120);
+
+        TextView label = new TextView(this);
+        label.setText(name);
+        label.setTextColor(Color.WHITE);
+        label.setTextSize(10);
+        label.setGravity(Gravity.CENTER);
+
+        appWrapper.addView(icon);
+        appWrapper.addView(label);
+        
+        // Add to Grid
+        GridLayout.LayoutParams params = new GridLayout.LayoutParams();
+        params.width = 0;
+        params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+        params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+        appGrid.addView(appWrapper, params);
+    }
+
+    private void showRootSettings() {
+        // This will be our fake Magisk/Zygisk injector
+        Toast.makeText(this, "Opening Zygisk Settings...", Toast.LENGTH_SHORT).show();
+        // Next step: Implement root UI
+    }
+
+    private void openPlayStore() {
+        Toast.makeText(this, "Opening Play Store (Virtual)...", Toast.LENGTH_SHORT).show();
+        // Next step: Implement Play Store APK extractor
+    }
+
+    private void launchFreeFire() {
+        // Next step: Trigger BlackBox VM to launch Free Fire
+        Toast.makeText(this, "Booting ACE Bypass & Launching FF...", Toast.LENGTH_LONG).show();
     }
 }
