@@ -36,36 +36,28 @@ jobs:
     - name: Patch BlackBox Gradle Perfectly
       run: |
         echo "Patching Gradle Scripts..."
-        # 1. Fix dead repositories
+        # Fix dead repositories
         sed -i 's/jcenter()/mavenCentral()/g' BlackBox/build.gradle
         
-        # 2. Fix SDK versions using OLD AGP syntax to avoid Ext error
-        # We match the exact word so it doesn't break 'ext' blocks
+        # Fix SDK versions cleanly
         sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 34/g' BlackBox/build.gradle || true
         sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' BlackBox/build.gradle || true
         sed -i 's/minSdkVersion [0-9]*/minSdkVersion 26/g' BlackBox/build.gradle || true
-        
-        # 3. Check for ext block variables just in case
-        if grep -q "compileSdkVersion =" BlackBox/build.gradle; then
-            sed -i 's/compileSdkVersion = [0-9]*/compileSdkVersion = 34/g' BlackBox/build.gradle
-        fi
 
         echo "--- Patched BlackBox/build.gradle ---"
-        head -n 40 BlackBox/build.gradle
+        head -n 30 BlackBox/build.gradle
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
-        gradle-version: 8.0
-
-    - name: Generate Wrapper
-      run: gradle wrapper --gradle-version 8.0
+        gradle-version: 8.2.1
 
     - name: Build with Gradle
       run: |
         echo "Starting build..."
         set +e
-        ./gradlew assembleDebug --stacktrace > build.log 2>&1
+        # Using system gradle instead of ./gradlew
+        gradle assembleDebug --stacktrace > build.log 2>&1
         EXIT_CODE=$?
         
         if [ $EXIT_CODE -ne 0 ]; then
