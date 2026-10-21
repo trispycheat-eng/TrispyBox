@@ -26,7 +26,6 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    // Required for BlackBox VM native libraries
     packagingOptions {
         jniLibs {
             useLegacyPackaging = true
@@ -35,7 +34,6 @@ android {
 }
 
 dependencies {
-    // Required for BlackBox Virtual Machine
     implementation 'top.niunaijun:blackbox:1.0.4'
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
