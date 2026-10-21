@@ -34,7 +34,7 @@ android {
 }
 
 dependencies {
-    // The remote VM Engine (No more local compiling)
-    implementation 'com.github.niunaijun:BlackBox:1.0.4'
+    // THE CORRECT DEPENDENCY FOR THE 2.1.0 RELEASE
+    implementation 'com.github.FBlackBox:BlackBox:2.1.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
