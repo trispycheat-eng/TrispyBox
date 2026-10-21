@@ -22,30 +22,59 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Unzip BlackBox Engine
+    - name: Unzip BlackBox Engine Safely
       run: |
-        echo "Extracting..."
-        unzip -q BlackBox.zip -d temp_extract
-        if [ -f "temp_extract/build.gradle" ]; then
-           mv temp_extract BlackBox
+        mkdir -p BlackBox
+        unzip -q BlackBox.zip -d BlackBox_tmp
+        if [ -f "BlackBox_tmp/build.gradle" ]; then
+            mv BlackBox_tmp/* BlackBox/
         else
-           mv temp_extract/* BlackBox
-           rm -rf temp_extract
+            # If the zip has a folder inside (e.g. BlackBox-2.1.0)
+            FOLDER=$(ls BlackBox_tmp | head -n 1)
+            mv BlackBox_tmp/$FOLDER/* BlackBox/
         fi
+        rm -rf BlackBox_tmp
 
-    - name: Patch BlackBox Gradle Perfectly
+    - name: Patch BlackBox Gradle (Python)
       run: |
-        echo "Patching Gradle Scripts..."
-        # Fix dead repositories
-        sed -i 's/jcenter()/mavenCentral()/g' BlackBox/build.gradle
-        
-        # Fix SDK versions cleanly
-        sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 34/g' BlackBox/build.gradle || true
-        sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' BlackBox/build.gradle || true
-        sed -i 's/minSdkVersion [0-9]*/minSdkVersion 26/g' BlackBox/build.gradle || true
+        python3 - << 'EOF'
+        import re
+        try:
+            with open('BlackBox/build.gradle', 'r') as f:
+                content = f.read()
 
-        echo "--- Patched BlackBox/build.gradle ---"
-        head -n 30 BlackBox/build.gradle
+            # 1. Fix dead jcenter
+            content = content.replace('jcenter()', 'mavenCentral()')
+            
+            # 2. Fix ext block variables (compileSdkVersion = 30)
+            content = re.sub(r'compileSdkVersion\s*=\s*\d+', 'compileSdkVersion = 34', content)
+            content = re.sub(r'targetSdkVersion\s*=\s*\d+', 'targetSdkVersion = 34', content)
+            content = re.sub(r'minSdkVersion\s*=\s*\d+', 'minSdkVersion = 26', content)
+            
+            # 3. Fix android block variables (compileSdkVersion 30)
+            content = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 34', content)
+            content = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 34', content)
+            content = re.sub(r'minSdkVersion\s+\d+', 'minSdkVersion 26', content)
+
+            # 4. Add namespace if missing (required for AGP 8+)
+            if 'namespace ' not in content:
+                content = content.replace('android {', 'android {\n    namespace "top.niunaijun.blackbox"')
+
+            with open('BlackBox/build.gradle', 'w') as f:
+                f.write(content)
+            print("Patched BlackBox build.gradle successfully.")
+        except Exception as e:
+            print("Patch error:", e)
+        EOF
+        
+        echo "--- Final BlackBox/build.gradle ---"
+        head -n 40 BlackBox/build.gradle
+
+    - name: Force AndroidX and Jetifier
+      run: |
+        echo "android.useAndroidX=true" >> gradle.properties
+        echo "android.enableJetifier=true" >> gradle.properties
+        echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8" >> gradle.properties
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
@@ -56,7 +85,6 @@ jobs:
       run: |
         echo "Starting build..."
         set +e
-        # Using system gradle instead of ./gradlew
         gradle assembleDebug --stacktrace > build.log 2>&1
         EXIT_CODE=$?
         
