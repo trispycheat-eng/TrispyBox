@@ -34,7 +34,6 @@ android {
 }
 
 dependencies {
-    // Link the local BlackBox engine module
     implementation project(':BlackBox')
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
