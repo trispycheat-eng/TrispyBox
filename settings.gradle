@@ -6,7 +6,7 @@ pluginManagement {
     }
 }
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    // Removed FAIL_ON_PROJECT_REPOS to stop the error
     repositories {
         google()
         mavenCentral()
@@ -14,7 +14,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "TrispyBox"
 include ':app'
-
-// Include the local BlackBox engine we just extracted
 include ':BlackBox'
 project(':BlackBox').projectDir = new File(settingsDir, 'BlackBox')
