@@ -56,7 +56,6 @@ jobs:
             repositories {
                 google()
                 mavenCentral()
-                maven { url 'https://jitpack.io' }
             }
         }
         rootProject.name = "TrispyBox"
@@ -75,21 +74,51 @@ jobs:
         project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
         include ':android-mirror'
         project(':android-mirror').projectDir = new File(settingsDir, 'BlackBox/android-mirror')
+        include ':black-reflection'
+        project(':black-reflection').projectDir = new File(settingsDir, 'BlackBox/black-reflection')
         EOF
 
-    - name: Patch All Modules & Strip Manifest Packages
+    - name: Patch Modules & Rewrite BlackReflection
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        # 1. PATCH ALL BUILD.GRADLE FILES
+        # 1. REWRITE black-reflection COMPLETELY
+        br_dir = 'BlackBox/black-reflection'
+        if os.path.exists(br_dir):
+            os.makedirs(os.path.join(br_dir, 'src/main'), exist_ok=True)
+            with open(os.path.join(br_dir, 'src/main/AndroidManifest.xml'), 'w') as f:
+                f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
+            
+            with open(os.path.join(br_dir, 'build.gradle'), 'w') as f:
+                f.write("""
+        plugins {
+            id 'com.android.library'
+        }
+        android {
+            namespace 'top.niunaijun.blackreflection'
+            compileSdk 34
+            defaultConfig {
+                minSdk 26
+                targetSdk 34
+            }
+            buildTypes {
+                debug { matchingFallbacks = ['debug', 'release'] }
+                release { matchingFallbacks = ['release', 'debug'] }
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
+        }
+                """)
+
+        # 2. PATCH ALL OTHER MODULES
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
         for module_gradle in build_files:
             if not os.path.exists(module_gradle) or 'black-reflection' in module_gradle: continue
-            
-            module_dir = os.path.dirname(module_gradle)
             
             with open(module_gradle, 'r') as f:
                 content = f.read()
@@ -113,9 +142,9 @@ jobs:
             content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
             
-            # Replace local black-reflection with Maven
-            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "implementation 'com.github.CodingGay.BlackReflection:core:1.3.4'", content)
-            content = content.replace("project(':black-reflection')", "implementation 'com.github.CodingGay.BlackReflection:core:1.3.4'")
+            # Replace local or remote black-reflection with local project link
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "implementation project(':black-reflection')", content)
+            content = content.replace("project(':black-reflection')", "implementation project(':black-reflection')")
 
             # Clean up leftovers
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 34', content)
@@ -129,7 +158,7 @@ jobs:
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
             # Add namespace and matchingFallbacks
-            safe_name = os.path.basename(module_dir).replace('-', '_')
+            safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
             if safe_name == "BlackBox" or safe_name == "": safe_name = "core"
             
             if 'android {' not in content:
@@ -140,7 +169,7 @@ jobs:
             with open(module_gradle, 'w') as f:
                 f.write(content)
 
-        # 2. STRIP PACKAGE FROM ALL MANIFESTS
+        # 3. STRIP PACKAGE FROM ALL MANIFESTS
         print("Stripping package attributes from AndroidManifests...")
         for root, dirs, files in os.walk('BlackBox'):
             for file in files:
@@ -149,13 +178,12 @@ jobs:
                     with open(manifest_path, 'r') as f:
                         manifest_content = f.read()
                     
-                    # Remove package="..." from <manifest>
                     new_manifest = re.sub(r'\spackage="[^"]*"', '', manifest_content)
                     
                     with open(manifest_path, 'w') as f:
                         f.write(new_manifest)
 
-        print("All modules and manifests patched successfully.")
+        print("All modules patched successfully.")
         EOF
 
     - name: Force AndroidX and Jetifier
