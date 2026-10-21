@@ -34,8 +34,8 @@ android {
 }
 
 dependencies {
-    // Link to the engine and reflection modules dynamically
     implementation project(':Bcore')
-    implementation project(':black-reflection')
+    // DOWNLOAD FROM MAVEN INSTEAD OF LOCAL PROJECT
+    implementation 'com.github.CodingGay.BlackReflection:core:1.3.4'
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
