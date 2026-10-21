@@ -28,59 +28,59 @@ jobs:
         mkdir -p BlackBox_tmp
         unzip -q BlackBox.zip -d BlackBox_tmp
         
-        mkdir -p BlackBox/app
+        mkdir -p BlackBox
         
         if [ -d "BlackBox_tmp/app" ]; then
             mv BlackBox_tmp/* BlackBox/
         elif [ -d "BlackBox_tmp/BlackBox-2.1.0/app" ]; then
             mv BlackBox_tmp/BlackBox-2.1.0/* BlackBox/
         else
-            mv BlackBox_tmp/* BlackBox/app/
+            mv BlackBox_tmp/* BlackBox/
         fi
         rm -rf BlackBox_tmp
 
-    - name: Patch BlackBox Gradle (Python Safe)
+    - name: Patch Bcore Gradle (Engine)
       run: |
         python3 - << 'EOF'
         import os
         import re
 
-        module_gradle = 'BlackBox/app/build.gradle'
+        # ONLY patch the Bcore module (The Engine)
+        module_gradle = 'BlackBox/Bcore/build.gradle'
         
         if not os.path.exists(module_gradle):
-            print("ERROR: Could not find BlackBox/app/build.gradle")
+            print("ERROR: Could not find BlackBox/Bcore/build.gradle")
             exit(1)
 
         with open(module_gradle, 'r') as f:
             content = f.read()
 
-        # 1. Change from Application to Library
+        # 1. Force Library
         content = content.replace("com.android.application", "com.android.library")
         
         # 2. Remove applicationId
         content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
         
-        # 3. Fix dead jcenter
+        # 3. Fix jcenter
         content = content.replace('jcenter()', 'mavenCentral()')
         
-        # 4. BRUTALLY REPLACE SDK LINES (Handles any variable or ext logic)
+        # 4. Brutally replace SDK lines
         content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 34', content)
         content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
         content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 34', content)
-        
-        # 5. Fix Kotlin Plugin IDs
+
+        # 5. Fix Kotlin Plugin
         content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
-        content = content.replace("id \"kotlin-android\"", "id 'org.jetbrains.kotlin.android'")
         content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-        # 6. Add namespace if missing
+        # 6. Add namespace
         if 'namespace ' not in content:
-            content = content.replace('android {', 'android {\n    namespace "top.niunaijun.blackbox"')
+            content = content.replace('android {', 'android {\n    namespace "top.niunaijun.bcore"')
 
         with open(module_gradle, 'w') as f:
             f.write(content)
 
-        print("Patched BlackBox/app/build.gradle successfully.")
+        print("Patched BlackBox/Bcore/build.gradle successfully.")
         EOF
 
     - name: Force AndroidX and Jetifier
