@@ -34,6 +34,7 @@ android {
 }
 
 dependencies {
-    implementation project(':BlackBox')
+    // LINK TO BCORE (The Engine)
+    implementation project(':Bcore')
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
