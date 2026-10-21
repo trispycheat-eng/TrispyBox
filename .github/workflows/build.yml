@@ -27,6 +27,11 @@ jobs:
         mv temp_extract/* BlackBox
         rm -rf temp_extract
 
+    - name: Patch BlackBox Gradle
+      run: |
+        sed -i 's/jcenter()/mavenCentral()/g' BlackBox/build.gradle
+        sed -i 's/jcenter()/mavenCentral()/g' build.gradle
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
