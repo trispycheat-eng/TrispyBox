@@ -4,6 +4,10 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+    plugins {
+        // FORCE GRADLE TO RECOGNIZE THE KOTLIN PLUGIN
+        id 'org.jetbrains.kotlin.android' version '1.8.10' apply false
+    }
 }
 dependencyResolutionManagement {
     repositories {
