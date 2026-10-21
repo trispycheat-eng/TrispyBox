@@ -29,13 +29,12 @@ jobs:
         if [ -f "BlackBox_tmp/build.gradle" ]; then
             mv BlackBox_tmp/* BlackBox/
         else
-            # If the zip has a folder inside (e.g. BlackBox-2.1.0)
             FOLDER=$(ls BlackBox_tmp | head -n 1)
             mv BlackBox_tmp/$FOLDER/* BlackBox/
         fi
         rm -rf BlackBox_tmp
 
-    - name: Patch BlackBox Gradle (Python)
+    - name: Patch BlackBox Gradle to Library
       run: |
         python3 - << 'EOF'
         import re
@@ -43,32 +42,30 @@ jobs:
             with open('BlackBox/build.gradle', 'r') as f:
                 content = f.read()
 
-            # 1. Fix dead jcenter
+            # 1. Change from Application to Library
+            content = content.replace("com.android.application", "com.android.library")
+            
+            # 2. Remove applicationId (libraries don't have it)
+            content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
+            
+            # 3. Fix dead jcenter
             content = content.replace('jcenter()', 'mavenCentral()')
             
-            # 2. Fix ext block variables (compileSdkVersion = 30)
-            content = re.sub(r'compileSdkVersion\s*=\s*\d+', 'compileSdkVersion = 34', content)
-            content = re.sub(r'targetSdkVersion\s*=\s*\d+', 'targetSdkVersion = 34', content)
-            content = re.sub(r'minSdkVersion\s*=\s*\d+', 'minSdkVersion = 26', content)
-            
-            # 3. Fix android block variables (compileSdkVersion 30)
-            content = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 34', content)
-            content = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 34', content)
-            content = re.sub(r'minSdkVersion\s+\d+', 'minSdkVersion 26', content)
+            # 4. Fix SDK variables
+            content = re.sub(r'compileSdkVersion\s*[=\s]\s*\d+', 'compileSdkVersion 34', content)
+            content = re.sub(r'minSdkVersion\s*[=\s]\s*\d+', 'minSdkVersion 26', content)
+            content = re.sub(r'targetSdkVersion\s*[=\s]\s*\d+', 'targetSdkVersion 34', content)
 
-            # 4. Add namespace if missing (required for AGP 8+)
+            # 5. Add namespace if missing
             if 'namespace ' not in content:
                 content = content.replace('android {', 'android {\n    namespace "top.niunaijun.blackbox"')
 
             with open('BlackBox/build.gradle', 'w') as f:
                 f.write(content)
-            print("Patched BlackBox build.gradle successfully.")
+            print("Converted BlackBox to Library successfully.")
         except Exception as e:
             print("Patch error:", e)
         EOF
-        
-        echo "--- Final BlackBox/build.gradle ---"
-        head -n 40 BlackBox/build.gradle
 
     - name: Force AndroidX and Jetifier
       run: |
