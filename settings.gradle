@@ -9,8 +9,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' }
     }
 }
 rootProject.name = "TrispyBox"
 include ':app'
+
+// Local Module Integration
+include ':BlackBox'
+project(':BlackBox').projectDir = new File(settingsDir, 'BlackBox')
