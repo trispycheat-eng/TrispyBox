@@ -1,39 +1,38 @@
-name: Build Trispy Space
+name: Build Debug APK
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
+        cache: gradle
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
-      with:
-        gradle-version: 8.2
+    - name: Unzip BlackBox Engine
+      run: unzip -q BlackBox.zip -d BlackBox
 
-    - name: Build Debug APK
-      run: |
-        set -o pipefail
-        gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee build_log.txt
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
 
-    - name: Show Exact Error
-      if: failure()
-      run: |
-        echo "=============== EXACT ERROR ==============="
-        grep -i -E "error:|Caused by:|What went wrong:" build_log.txt -A 10 -B 5
+    - name: Build with Gradle
+      run: ./gradlew assembleDebug
 
     - name: Upload APK
-      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: TrispySpace-APK
+        name: TrispyBox-Debug
         path: app/build/outputs/apk/debug/app-debug.apk
