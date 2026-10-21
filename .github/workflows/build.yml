@@ -78,30 +78,95 @@ jobs:
         project(':black-reflection').projectDir = new File(settingsDir, 'BlackBox/black-reflection')
         EOF
 
-    - name: Patch Modules (Respect Java Libraries)
+    - name: Patch Modules & Overwrite Build Files
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
+        # 1. OVERWRITE black-reflection COMPLETELY
+        br_dir = 'BlackBox/black-reflection'
+        if os.path.exists(br_dir):
+            os.makedirs(os.path.join(br_dir, 'src/main'), exist_ok=True)
+            with open(os.path.join(br_dir, 'src/main/AndroidManifest.xml'), 'w') as f:
+                f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
+            
+            with open(os.path.join(br_dir, 'build.gradle'), 'w') as f:
+                f.write("""
+        plugins {
+            id 'com.android.library'
+        }
+        android {
+            namespace 'top.niunaijun.blackreflection'
+            compileSdk 34
+            defaultConfig {
+                minSdk 26
+                targetSdk 34
+            }
+            buildTypes {
+                debug { matchingFallbacks = ['debug', 'release'] }
+                release { matchingFallbacks = ['release', 'debug'] }
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
+        }
+                """)
+
+        # 2. OVERWRITE android-mirror COMPLETELY
+        am_dir = 'BlackBox/android-mirror'
+        if os.path.exists(am_dir):
+            os.makedirs(os.path.join(am_dir, 'src/main'), exist_ok=True)
+            with open(os.path.join(am_dir, 'src/main/AndroidManifest.xml'), 'w') as f:
+                f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
+
+            with open(os.path.join(am_dir, 'build.gradle'), 'w') as f:
+                f.write("""
+        plugins {
+            id 'com.android.library'
+        }
+        android {
+            namespace 'top.niunaijun.androidmirror'
+            compileSdk 34
+            defaultConfig {
+                minSdk 26
+                targetSdk 34
+            }
+            buildTypes {
+                debug { matchingFallbacks = ['debug', 'release'] }
+                release { matchingFallbacks = ['release', 'debug'] }
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
+        }
+        dependencies {
+            implementation project(':black-reflection')
+        }
+                """)
+
+        # 3. PATCH ALL OTHER MODULES
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
         for module_gradle in build_files:
-            if not os.path.exists(module_gradle): continue
+            if not os.path.exists(module_gradle) or 'black-reflection' in module_gradle or 'android-mirror' in module_gradle: continue
             
             with open(module_gradle, 'r') as f:
                 content = f.read()
 
-            # 1. Only change Application to Library. DO NOT TOUCH java-library.
+            # Force Android Library
             content = content.replace("com.android.application", "com.android.library")
+            content = content.replace("apply plugin: 'java-library'", "apply plugin: 'com.android.library'")
             
-            # 2. Remove applicationId
+            # Remove applicationId
             content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
             
-            # 3. Fix jcenter
+            # Fix jcenter
             content = content.replace('jcenter()', 'mavenCentral()')
             
-            # 4. Replace rootProject.ext variables
+            # Replace rootProject.ext variables
             content = content.replace('rootProject.ext.compileSdkVersion', '34')
             content = content.replace('rootProject.ext.buildToolsVersion', '"34.0.0"')
             content = content.replace('rootProject.ext.minSdkVersion', '26')
@@ -124,36 +189,33 @@ jobs:
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-            # 5. Handle Android specific blocks ONLY if it's an Android library
-            is_android_module = "com.android.library" in content
-            if is_android_module:
-                safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
-                if safe_name == "BlackBox" or safe_name == "": safe_name = "core"
+            # Add namespace and matchingFallbacks
+            safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
+            if safe_name == "BlackBox" or safe_name == "": safe_name = "core"
 
-                if 'android {' not in content:
-                    content += f"\nandroid {{\n    namespace 'top.niunaijun.{safe_name}'\n    compileSdk 34\n    defaultConfig {{\n        minSdk 26\n        targetSdk 34\n    }}\n    buildTypes {{\n        debug {{ matchingFallbacks = ['debug', 'release'] }}\n        release {{ matchingFallbacks = ['release', 'debug'] }}\n    }}\n    compileOptions {{\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n    }}\n}}\n"
-                elif 'namespace ' not in content:
-                    content = content.replace('android {', f'android {{\n    namespace "top.niunaijun.{safe_name}"')
+            if 'android {' not in content:
+                content += f"\nandroid {{\n    namespace 'top.niunaijun.{safe_name}'\n    compileSdk 34\n    defaultConfig {{\n        minSdk 26\n        targetSdk 34\n    }}\n    buildTypes {{\n        debug {{ matchingFallbacks = ['debug', 'release'] }}\n        release {{ matchingFallbacks = ['release', 'debug'] }}\n    }}\n    compileOptions {{\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n    }}\n}}\n"
+            elif 'namespace ' not in content:
+                content = content.replace('android {', f'android {{\n    namespace "top.niunaijun.{safe_name}"')
 
-                # Ensure buildTypes has matchingFallbacks
-                if 'matchingFallbacks' not in content and 'buildTypes {' in content:
-                    content = content.replace('buildTypes {', "buildTypes {\n        debug { matchingFallbacks = ['debug', 'release'] }\n        release { matchingFallbacks = ['release', 'debug'] }")
+            if 'matchingFallbacks' not in content and 'buildTypes {' in content:
+                content = content.replace('buildTypes {', "buildTypes {\n        debug { matchingFallbacks = ['debug', 'release'] }\n        release { matchingFallbacks = ['release', 'debug'] }")
 
-                # Create AndroidManifest if missing
-                module_dir = os.path.dirname(module_gradle)
-                manifest_dir = os.path.join(module_dir, 'src/main')
-                manifest_path = os.path.join(manifest_dir, 'AndroidManifest.xml')
-                os.makedirs(manifest_dir, exist_ok=True)
-                if not os.path.exists(manifest_path):
-                    with open(manifest_path, 'w') as f:
-                        f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
-
-                # Strip package from manifest
-                with open(manifest_path, 'r') as f:
-                    manifest_content = f.read()
-                new_manifest = re.sub(r'\spackage="[^"]*"', '', manifest_content)
+            # Create AndroidManifest if missing
+            module_dir = os.path.dirname(module_gradle)
+            manifest_dir = os.path.join(module_dir, 'src/main')
+            manifest_path = os.path.join(manifest_dir, 'AndroidManifest.xml')
+            os.makedirs(manifest_dir, exist_ok=True)
+            if not os.path.exists(manifest_path):
                 with open(manifest_path, 'w') as f:
-                    f.write(new_manifest)
+                    f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
+
+            # Strip package from manifest
+            with open(manifest_path, 'r') as f:
+                manifest_content = f.read()
+            new_manifest = re.sub(r'\spackage="[^"]*"', '', manifest_content)
+            with open(manifest_path, 'w') as f:
+                f.write(new_manifest)
 
             with open(module_gradle, 'w') as f:
                 f.write(content)
