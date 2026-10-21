@@ -11,15 +11,10 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 public class MainActivity extends Activity {
-
-    private LinearLayout mainContainer;
-    private GridLayout appGrid;
-    private LinearLayout topBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,19 +23,18 @@ public class MainActivity extends Activity {
     }
 
     private void buildHomeScreen() {
-        // Main Wrapper
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.parseColor("#0F0F0F")); // Deep dark
+        root.setBackgroundColor(Color.parseColor("#0F0F0F"));
         root.setPadding(20, 40, 20, 20);
 
-        // Top Bar (Battery, Time, Settings)
-        topBar = new LinearLayout(this);
+        // Top Bar
+        LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         
         TextView time = new TextView(this);
-        time.setText("10:45 AM");
+        time.setText("TRISPY OS");
         time.setTextColor(Color.WHITE);
         time.setTextSize(16);
         time.setTypeface(null, Typeface.BOLD);
@@ -50,13 +44,13 @@ public class MainActivity extends Activity {
         settingsBtn.setText("⚙ ZYGISK");
         settingsBtn.setTextColor(Color.parseColor("#FF2200"));
         settingsBtn.setBackgroundColor(Color.TRANSPARENT);
-        settingsBtn.setOnClickListener(v -> showRootSettings());
+        settingsBtn.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         topBar.addView(settingsBtn);
         
         root.addView(topBar);
 
-        // Main Inner Screen (VPhone Style)
-        mainContainer = new LinearLayout(this);
+        // Desktop Container
+        LinearLayout mainContainer = new LinearLayout(this);
         mainContainer.setOrientation(LinearLayout.VERTICAL);
         mainContainer.setBackgroundColor(Color.parseColor("#1A1A1A"));
         mainContainer.setPadding(20, 20, 20, 20);
@@ -64,56 +58,43 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f);
         innerParams.setMargins(0, 30, 0, 30);
         mainContainer.setLayoutParams(innerParams);
-        mainContainer.setBackgroundResource(android.R.drawable.dialog_holo_dark_frame); // borders
+        mainContainer.setBackgroundResource(android.R.drawable.dialog_holo_dark_frame);
 
         // App Grid
-        appGrid = new GridLayout(this);
+        GridLayout appGrid = new GridLayout(this);
         appGrid.setColumnCount(4);
         appGrid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
         
-        // Fake Apps for realism
-        addAppIcon("Settings", "#555555");
-        addAppIcon("Camera", "#0055FF");
-        addAppIcon("Gallery", "#FFAA00");
-        addAppIcon("Play Store", "#00FF00");
+        addAppIcon(appGrid, "Play Store", "#00FF00", v -> startActivity(new Intent(this, PlayStoreActivity.class)));
+        addAppIcon(appGrid, "Free Fire", "#FF2200", v -> VMEngine.launchApp(this, "com.dts.freefiremax"));
+        addAppIcon(appGrid, "Settings", "#555555", v -> startActivity(new Intent(this, SettingsActivity.class)));
 
         mainContainer.addView(appGrid);
         root.addView(mainContainer);
 
-        // Bottom Dock (Free Fire and Files)
+        // Bottom Dock
         LinearLayout dock = new LinearLayout(this);
         dock.setOrientation(LinearLayout.HORIZONTAL);
         dock.setGravity(Gravity.CENTER);
-        dock.setPadding(0, 20, 0, 20);
 
-        Button playStoreBtn = new Button(this);
-        playStoreBtn.setText("Play Store");
-        playStoreBtn.setBackgroundColor(Color.parseColor("#00FF00"));
-        playStoreBtn.setTextColor(Color.BLACK);
-        playStoreBtn.setOnClickListener(v -> openPlayStore());
-
-        Button ffBtn = new Button(this);
-        ffBtn.setText("Free Fire MAX");
-        ffBtn.setBackgroundColor(Color.parseColor("#FF2200"));
-        ffBtn.setTextColor(Color.WHITE);
-        ffBtn.setOnClickListener(v -> launchFreeFire());
-
-        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
-        btnParams.setMargins(10, 0, 10, 0);
+        Button launchBtn = new Button(this);
+        launchBtn.setText("LAUNCH VM");
+        launchBtn.setBackgroundColor(Color.parseColor("#FF2200"));
+        launchBtn.setTextColor(Color.WHITE);
+        launchBtn.setOnClickListener(v -> Toast.makeText(this, "VM is running in background. Use icons above.", Toast.LENGTH_SHORT).show());
         
-        dock.addView(playStoreBtn, btnParams);
-        dock.addView(ffBtn, btnParams);
-        
+        dock.addView(launchBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(dock);
 
         setContentView(root);
     }
 
-    private void addAppIcon(String name, String colorHex) {
+    private void addAppIcon(GridLayout grid, String name, String colorHex, View.OnClickListener listener) {
         LinearLayout appWrapper = new LinearLayout(this);
         appWrapper.setOrientation(LinearLayout.VERTICAL);
         appWrapper.setGravity(Gravity.CENTER);
         appWrapper.setPadding(10, 10, 10, 10);
+        appWrapper.setOnClickListener(listener);
 
         TextView icon = new TextView(this);
         icon.setText(name.substring(0, 1));
@@ -133,27 +114,10 @@ public class MainActivity extends Activity {
         appWrapper.addView(icon);
         appWrapper.addView(label);
         
-        // Add to Grid
         GridLayout.LayoutParams params = new GridLayout.LayoutParams();
         params.width = 0;
         params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
         params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-        appGrid.addView(appWrapper, params);
-    }
-
-    private void showRootSettings() {
-        // This will be our fake Magisk/Zygisk injector
-        Toast.makeText(this, "Opening Zygisk Settings...", Toast.LENGTH_SHORT).show();
-        // Next step: Implement root UI
-    }
-
-    private void openPlayStore() {
-        Toast.makeText(this, "Opening Play Store (Virtual)...", Toast.LENGTH_SHORT).show();
-        // Next step: Implement Play Store APK extractor
-    }
-
-    private void launchFreeFire() {
-        // Next step: Trigger BlackBox VM to launch Free Fire
-        Toast.makeText(this, "Booting ACE Bypass & Launching FF...", Toast.LENGTH_LONG).show();
+        grid.addView(appWrapper, params);
     }
 }
