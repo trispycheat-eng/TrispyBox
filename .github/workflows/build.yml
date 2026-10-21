@@ -78,14 +78,13 @@ jobs:
         project(':black-reflection').projectDir = new File(settingsDir, 'BlackBox/black-reflection')
         EOF
 
-    - name: Patch All Modules
+    - name: Patch All Modules (Convert to Android Library)
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        # Find EVERY build.gradle inside BlackBox
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
 
         for module_gradle in build_files:
@@ -94,8 +93,12 @@ jobs:
             with open(module_gradle, 'r') as f:
                 content = f.read()
 
-            # 1. Force Library
+            # 1. Force EVERYTHING to be an Android Library
             content = content.replace("com.android.application", "com.android.library")
+            content = content.replace("apply plugin: 'java-library'", "apply plugin: 'com.android.library'")
+            content = content.replace("id 'java-library'", "id 'com.android.library'")
+            content = content.replace("apply plugin: 'java'", "apply plugin: 'com.android.library'")
+            content = content.replace("id 'java'", "id 'com.android.library'")
             
             # 2. Remove applicationId
             content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
@@ -103,7 +106,7 @@ jobs:
             # 3. Fix dead jcenter
             content = content.replace('jcenter()', 'mavenCentral()')
             
-            # 4. Replace ALL rootProject.ext variables directly with hardcoded strings
+            # 4. Replace rootProject.ext variables
             content = content.replace('rootProject.ext.compileSdkVersion', '34')
             content = content.replace('rootProject.ext.buildToolsVersion', '"34.0.0"')
             content = content.replace('rootProject.ext.minSdkVersion', '26')
@@ -126,10 +129,13 @@ jobs:
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-            # 8. Add namespace
-            if 'namespace ' not in content and 'android {' in content:
-                safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
-                if safe_name == "BlackBox": safe_name = "core"
+            # 8. Add namespace and android block if missing
+            safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
+            if safe_name == "BlackBox" or safe_name == "": safe_name = "core"
+            
+            if 'android {' not in content and 'com.android.library' in content:
+                content += f"\nandroid {{\n    namespace 'top.niunaijun.{safe_name}'\n    compileSdk 34\n    defaultConfig {{\n        minSdk 26\n        targetSdk 34\n    }}\n    compileOptions {{\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n    }}\n}}\n"
+            elif 'namespace ' not in content and 'android {' in content:
                 content = content.replace('android {', f'android {{\n    namespace "top.niunaijun.{safe_name}"')
 
             with open(module_gradle, 'w') as f:
