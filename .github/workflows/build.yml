@@ -22,51 +22,6 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Unzip BlackBox Engine
-      run: |
-        unzip -q BlackBox.zip -d temp_extract
-        mv temp_extract/* BlackBox
-        rm -rf temp_extract
-
-    # 1. FORCE OVERWRITE settings.gradle
-    - name: Overwrite Settings Gradle
-      run: |
-        echo "Forcing custom settings.gradle..."
-        cat <<EOF > settings.gradle
-        pluginManagement {
-            repositories {
-                google()
-                mavenCentral()
-                gradlePluginPortal()
-            }
-        }
-        dependencyResolutionManagement {
-            repositories {
-                google()
-                mavenCentral()
-            }
-        }
-        rootProject.name = "TrispyBox"
-        include ':app'
-        include ':BlackBox'
-        project(':BlackBox').projectDir = new File(settingsDir, 'BlackBox')
-        EOF
-
-    # 2. PATCH BLACKBOX REPOSITORIES
-    - name: Patch BlackBox Gradle Files
-      run: |
-        echo "Patching BlackBox repositories..."
-        # Replace jcenter with mavenCentral
-        sed -i 's/jcenter()/mavenCentral()/g' BlackBox/build.gradle
-        sed -i 's/jcenter()/mavenCentral()/g' build.gradle
-        
-        # Aggressively remove any repositories block from BlackBox to prevent Gradle conflicts
-        sed -i '/repositories {/,/}/d' BlackBox/build.gradle || true
-
-        # Force compileSdk and targetSdk to 34
-        sed -i 's/compileSdkVersion [0-9]*/compileSdk 34/g' BlackBox/build.gradle || true
-        sed -i 's/targetSdkVersion [0-9]*/targetSdk 34/g' BlackBox/build.gradle || true
-
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
@@ -75,7 +30,6 @@ jobs:
     - name: Generate Wrapper
       run: gradle wrapper --gradle-version 8.7
 
-    # 3. BUILD WITH SMART ERROR FILTER
     - name: Build with Gradle
       run: |
         echo "Building..."
@@ -87,10 +41,8 @@ jobs:
           echo "====================================================="
           echo "🚨 EXACT ERROR (FILTERED) 🚨"
           echo "====================================================="
-          # Extract the core error message and the lines directly after it
           grep -A 25 -m 1 -E "What went wrong:|FAILURE: Build failed" build.log
           echo "====================================================="
-          echo "Scroll down for the full trace if needed, but check above first."
           exit 1
         else
           echo "BUILD SUCCESSFUL"
