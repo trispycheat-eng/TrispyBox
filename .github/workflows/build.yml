@@ -46,9 +46,8 @@ jobs:
         import glob
         import re
 
-        # Patch all build.gradle files inside BlackBox
         build_files = glob.glob('BlackBox/*/build.gradle')
-        build_files.append('BlackBox/build.gradle') # Include root just in case
+        build_files.append('BlackBox/build.gradle')
 
         for module_gradle in build_files:
             if not os.path.exists(module_gradle): continue
@@ -57,7 +56,7 @@ jobs:
             with open(module_gradle, 'r') as f:
                 content = f.read()
 
-            # 1. Force Library (not app)
+            # 1. Force Library
             content = content.replace("com.android.application", "com.android.library")
             
             # 2. Remove applicationId
@@ -71,10 +70,11 @@ jobs:
             content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
             content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 34', content)
 
-            # 5. THE FIX: Replace the missing rootProject.ext variable with the actual module path
-            content = content.replace('rootProject.ext.blackReflection', "project(':black-reflection')")
+            # 5. THE FIX: Nuke the entire broken string line for BlackReflection
+            # It looks for lines containing "com.github.CodingGay.BlackReflection" and replaces the whole line
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "implementation project(':black-reflection')", content)
             
-            # Replace other rootProject.ext just in case
+            # Replace other rootProject.ext variables
             content = content.replace('rootProject.ext.compileSdkVersion', '34')
             content = content.replace('rootProject.ext.minSdkVersion', '26')
             content = content.replace('rootProject.ext.targetSdkVersion', '34')
