@@ -20,6 +20,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.IBinder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
