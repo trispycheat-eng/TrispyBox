@@ -134,7 +134,7 @@ jobs:
             # Fix jcenter
             content = content.replace('jcenter()', 'mavenCentral()')
             
-            # Replace rootProject.ext variables
+            # Replace rootProject.ext variables safely
             content = content.replace('rootProject.ext.compileSdkVersion', '34')
             content = content.replace('rootProject.ext.buildToolsVersion', '"34.0.0"')
             content = content.replace('rootProject.ext.minSdkVersion', '26')
@@ -142,9 +142,9 @@ jobs:
             content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
             
-            # Replace local or remote black-reflection with local project link
+            # Safely swap the reflection dependency
+            content = content.replace('rootProject.ext.blackReflection', "project(':black-reflection')")
             content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "implementation project(':black-reflection')", content)
-            content = content.replace("project(':black-reflection')", "implementation project(':black-reflection')")
 
             # Clean up leftovers
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 34', content)
