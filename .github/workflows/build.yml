@@ -39,48 +39,71 @@ jobs:
         fi
         rm -rf BlackBox_tmp
 
-    - name: Generate Settings & Patch All Modules
+    - name: Hardcode Settings Gradle
+      run: |
+        cat << 'EOF' > settings.gradle
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+            plugins {
+                id 'org.jetbrains.kotlin.android' version '1.8.10' apply false
+            }
+        }
+        dependencyResolutionManagement {
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "TrispyBox"
+        include ':app'
+        include ':Bcore'
+        project(':Bcore').projectDir = new File(settingsDir, 'BlackBox/Bcore')
+        include ':Bcore:black-fake'
+        project(':Bcore:black-fake').projectDir = new File(settingsDir, 'BlackBox/Bcore/black-fake')
+        include ':Bcore:black-hook'
+        project(':Bcore:black-hook').projectDir = new File(settingsDir, 'BlackBox/Bcore/black-hook')
+        include ':Bcore:pine-core'
+        project(':Bcore:pine-core').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-core')
+        include ':Bcore:pine-xposed'
+        project(':Bcore:pine-xposed').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed')
+        include ':Bcore:pine-xposed-res'
+        project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
+        include ':android-mirror'
+        project(':android-mirror').projectDir = new File(settingsDir, 'BlackBox/android-mirror')
+        include ':black-reflection'
+        project(':black-reflection').projectDir = new File(settingsDir, 'BlackBox/black-reflection')
+        EOF
+
+    - name: Patch All Modules
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        # 1. DYNAMICALLY GENERATE SETTINGS.GRADLE
-        modules = []
-        for root, dirs, files in os.walk('BlackBox'):
-            if 'build.gradle' in files and root != 'BlackBox':
-                mod_path = root.replace('BlackBox/', '')
-                mod_name = mod_path.replace('/', ':')
-                modules.append((mod_name, mod_path))
-
-        with open('settings.gradle', 'w') as f:
-            f.write("pluginManagement {\n    repositories {\n        google()\n        mavenCentral()\n        gradlePluginPortal()\n    }\n    plugins {\n        id 'org.jetbrains.kotlin.android' version '1.8.10' apply false\n    }\n}\n")
-            f.write("dependencyResolutionManagement {\n    repositories {\n        google()\n        mavenCentral()\n    }\n}\n")
-            f.write("rootProject.name = \"TrispyBox\"\n")
-            f.write("include ':app'\n")
-            
-            for mod_name, mod_path in modules:
-                if mod_name == 'app': continue 
-                f.write(f"include ':{mod_name}'\n")
-                f.write(f"project(':{mod_name}').projectDir = new File(settingsDir, 'BlackBox/{mod_path}')\n")
-
-        # 2. PATCH ALL BUILD.GRADLE FILES
+        # Find EVERY build.gradle inside BlackBox
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
+
         for module_gradle in build_files:
+            if not os.path.exists(module_gradle): continue
+            
             with open(module_gradle, 'r') as f:
                 content = f.read()
 
-            # Force Library
+            # 1. Force Library
             content = content.replace("com.android.application", "com.android.library")
             
-            # Remove applicationId
+            # 2. Remove applicationId
             content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
             
-            # Fix dead jcenter
+            # 3. Fix dead jcenter
             content = content.replace('jcenter()', 'mavenCentral()')
             
-            # THE ULTIMATE FIX: Replace ALL rootProject.ext variables directly
+            # 4. Replace ALL rootProject.ext variables directly with hardcoded strings
             content = content.replace('rootProject.ext.compileSdkVersion', '34')
             content = content.replace('rootProject.ext.buildToolsVersion', '"34.0.0"')
             content = content.replace('rootProject.ext.minSdkVersion', '26')
@@ -89,21 +112,21 @@ jobs:
             content = content.replace('rootProject.ext.blackReflection', "project(':black-reflection')")
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
 
-            # Clean up any leftover regex for SDK versions just in case
+            # 5. Clean up leftovers
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 34', content)
             content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
             content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 34', content)
             content = re.sub(r'buildToolsVersion\s+[^=\n]+', 'buildToolsVersion "34.0.0"', content)
             content = re.sub(r'ndkVersion\s+[^=\n]+', 'ndkVersion "25.1.8937393"', content)
 
-            # Fix BlackReflection dependency string
+            # 6. Fix BlackReflection dependency string
             content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "implementation project(':black-reflection')", content)
 
-            # Fix Kotlin Plugin
+            # 7. Fix Kotlin Plugin
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-            # Add Namespace
+            # 8. Add namespace
             if 'namespace ' not in content and 'android {' in content:
                 safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
                 if safe_name == "BlackBox": safe_name = "core"
