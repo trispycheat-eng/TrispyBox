@@ -22,6 +22,31 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
+    - name: Unzip and Flatten BlackBox Engine
+      run: |
+        echo "Extracting BlackBox..."
+        unzip -q BlackBox.zip -d temp_extract
+        if [ -f "temp_extract/build.gradle" ]; then
+           mv temp_extract BlackBox
+        else
+           mv temp_extract/* BlackBox
+           rm -rf temp_extract
+        fi
+
+    - name: Patch BlackBox Gradle Files
+      run: |
+        echo "Patching BlackBox repositories..."
+        # ONLY replace jcenter. Do NOT delete brackets.
+        sed -i 's/jcenter()/mavenCentral()/g' BlackBox/build.gradle
+        
+        # Force SDK versions
+        sed -i 's/compileSdkVersion [0-9]*/compileSdk 34/g' BlackBox/build.gradle || true
+        sed -i 's/targetSdkVersion [0-9]*/targetSdk 34/g' BlackBox/build.gradle || true
+        sed -i 's/minSdkVersion [0-9]*/minSdk 26/g' BlackBox/build.gradle || true
+        
+        echo "--- Patched BlackBox build.gradle ---"
+        cat BlackBox/build.gradle
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
