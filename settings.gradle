@@ -6,7 +6,6 @@ pluginManagement {
     }
 }
 dependencyResolutionManagement {
-    // Removed FAIL_ON_PROJECT_REPOS to stop the error
     repositories {
         google()
         mavenCentral()
