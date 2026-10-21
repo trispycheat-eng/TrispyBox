@@ -45,7 +45,6 @@ jobs:
         import os
         import re
 
-        # ONLY patch the Bcore module (The Engine)
         module_gradle = 'BlackBox/Bcore/build.gradle'
         
         if not os.path.exists(module_gradle):
@@ -69,11 +68,19 @@ jobs:
         content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
         content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 34', content)
 
-        # 5. Fix Kotlin Plugin
+        # 5. THE FIX: Replace the missing global variable with 'true'
+        content = content.replace('rootProject.ext.blackReflection', 'true')
+        
+        # Also replace any other rootProject.ext just in case
+        content = content.replace('rootProject.ext.compileSdkVersion', '34')
+        content = content.replace('rootProject.ext.minSdkVersion', '26')
+        content = content.replace('rootProject.ext.targetSdkVersion', '34')
+
+        # 6. Fix Kotlin Plugin
         content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
         content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-        # 6. Add namespace
+        # 7. Add namespace
         if 'namespace ' not in content:
             content = content.replace('android {', 'android {\n    namespace "top.niunaijun.bcore"')
 
