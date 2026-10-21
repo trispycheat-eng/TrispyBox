@@ -62,39 +62,32 @@ public class StubActivity extends Activity {
     private static final String TAG = "TrispyAbsoluteDefense";
     private static final String DEFAULT_TARGET_PACKAGE = "com.dts.freefiremax";
     private static final String FALLBACK_FF_ACTIVITY = "com.dts.freefireth.FFMainActivity";
-    
+
     private String targetPackageName = DEFAULT_TARGET_PACKAGE;
     private String targetActivityClassName = "";
-    
     private ApplicationInfo targetAppInfo;
     private ActivityInfo targetActivityInfo;
     private DexClassLoader targetClassLoader;
     private SandboxContext sandboxContext;
-    
     private TextView logTextView;
     private ScrollView logScrollView;
     private StringBuilder logStringBuilder = new StringBuilder();
-    
     private WindowManager windowManager;
     private View floatingPanelView;
-    
     private boolean isEngineInitialized = false;
     private boolean isActivityLaunched = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
         buildMainDashboardUI();
         log("=========================================");
         log("INITIALIZING TRISPY ABSOLUTE DEFENSE");
         log("=========================================");
-        
         installGlobalCrashHandler();
         VirtualWindowHelper.initUnsafe();
         HardwareSpoofer.spoofHardware();
         captureIntentData();
-        
         new Thread(() -> {
             try {
                 executeEngineSequence();
@@ -122,7 +115,6 @@ public class StubActivity extends Activity {
             topBar.setOrientation(LinearLayout.HORIZONTAL);
             topBar.setGravity(Gravity.CENTER_VERTICAL);
             topBar.setPadding(0, 0, 0, 20);
-
             TextView title = new TextView(this);
             title.setText("TRISPY STORE");
             title.setTextColor(Color.parseColor("#FF2200"));
@@ -190,11 +182,7 @@ public class StubActivity extends Activity {
 
             logScrollView = new ScrollView(this);
             logScrollView.setBackgroundColor(Color.BLACK);
-            logScrollView.setLayoutParams(new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    0,
-                    1.0f
-            ));
+            logScrollView.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f));
 
             LinearLayout logContainer = new LinearLayout(this);
             logContainer.setOrientation(LinearLayout.VERTICAL);
@@ -227,23 +215,19 @@ public class StubActivity extends Activity {
         updateDebuggerText();
     }
 
-    private void logFatalError(final String header, final Throwable t) {
+    private void logFatalError(final String header, Throwable t) {
         Log.e(TAG, header, t);
         logStringBuilder.append("\n[X] ").append(header).append("\n");
         logStringBuilder.append("Reason: ").append(t.toString()).append("\n");
-        
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         t.printStackTrace(pw);
         String stackTrace = sw.toString();
-        
         String[] lines = stackTrace.split("\n");
         for (int i = 0; i < Math.min(lines.length, 10); i++) {
             logStringBuilder.append(lines[i]).append("\n");
         }
-
         updateDebuggerText();
-        
         runOnUiThread(() -> {
             if (logTextView != null) logTextView.setTextColor(Color.RED);
         });
@@ -282,14 +266,12 @@ public class StubActivity extends Activity {
 
     private void executeEngineSequence() throws Exception {
         if (isEngineInitialized) return;
-        
         log("Beginning Engine Sequence...");
         resolveApplicationInfo();
         setupVirtualFileSystem();
         extractNativeLibraries();
         resolveTargetActivity();
         setupEnvironment();
-        
         runOnUiThread(() -> {
             try {
                 launchVirtualActivity();
@@ -322,7 +304,6 @@ public class StubActivity extends Activity {
     private void extractNativeLibraries() {
         File libDir = new File(getFilesDir(), "TrispyVM/Libs/" + targetPackageName);
         if (!libDir.exists()) libDir.mkdirs();
-
         try (ZipFile zip = new ZipFile(targetAppInfo.sourceDir)) {
             Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
@@ -342,9 +323,8 @@ public class StubActivity extends Activity {
                     }
                 }
             }
-            log("Native Libraries Extracted.");
-        } catch (Throwable t) {
-            logError("Failed to extract libs: " + t.getMessage());
+        } catch (IOException e) {
+            logError("Native extract failed: " + e.getMessage());
         }
     }
 
@@ -357,13 +337,11 @@ public class StubActivity extends Activity {
                 return;
             }
         } catch (Throwable t) {}
-
         if (targetPackageName.contains("freefire")) {
             targetActivityClassName = FALLBACK_FF_ACTIVITY;
             log("Resolved Hardcoded: " + targetActivityClassName);
             return;
         }
-
         if (targetActivityClassName == null || targetActivityClassName.isEmpty()) {
             throw new RuntimeException("Could not resolve Activity.");
         }
@@ -371,24 +349,20 @@ public class StubActivity extends Activity {
 
     private void setupEnvironment() throws Exception {
         sandboxContext = new SandboxContext(this, targetPackageName);
-
         StringBuilder dexPathBuilder = new StringBuilder(targetAppInfo.sourceDir);
         if (targetAppInfo.splitSourceDirs != null) {
             for (String split : targetAppInfo.splitSourceDirs) {
                 dexPathBuilder.append(":").append(split);
             }
         }
-        
         File dexOutputDir = getDir("trispy_opt_dex", Context.MODE_PRIVATE);
         File libDir = new File(getFilesDir(), "TrispyVM/Libs/" + targetPackageName);
-        
         targetClassLoader = new DexClassLoader(
                 dexPathBuilder.toString(),
                 dexOutputDir.getAbsolutePath(),
                 libDir.getAbsolutePath(),
                 getClassLoader()
         );
-
         ComponentName component = new ComponentName(targetPackageName, targetActivityClassName);
         targetActivityInfo = getPackageManager().getActivityInfo(component, 0);
     }
@@ -427,7 +401,6 @@ public class StubActivity extends Activity {
             attachMethod.setAccessible(true);
             int paramCount = attachMethod.getParameterCount();
             Object[] args = new Object[paramCount];
-            
             args[0] = sandboxContext;
             args[1] = currentActivityThread;
             args[2] = realInstrumentation;
@@ -441,9 +414,7 @@ public class StubActivity extends Activity {
             args[10] = "";
             args[11] = null;
             args[12] = null;
-            
             for (int i = 13; i < paramCount; i++) args[i] = null;
-
             log("Invoking attach()...");
             attachMethod.invoke(targetActivity, args);
         } else {
@@ -452,36 +423,17 @@ public class StubActivity extends Activity {
 
         log("Injecting Bypass Environment...");
         VirtualWindowHelper.injectEnvironment(
-                targetActivity, sandboxContext, targetIntent, componentName, 
+                targetActivity, sandboxContext, targetIntent, componentName,
                 targetPackageName, currentActivityThread, realInstrumentation
         );
-
         RealmeBypass.inject(targetActivity);
 
-        log("Invoking onCreate() directly...");
-        
-        Method onCreateMethod = null;
-        Class<?> clazz = targetActivity.getClass();
-        while (clazz != null) {
-            try {
-                onCreateMethod = clazz.getDeclaredMethod("onCreate", Bundle.class);
-                break;
-            } catch (NoSuchMethodException e) {
-                clazz = clazz.getSuperclass();
-            }
-        }
-        
-        if (onCreateMethod != null) {
-            onCreateMethod.setAccessible(true);
-            onCreateMethod.invoke(targetActivity, (Bundle) null);
-        } else {
-            logError("Could not find onCreate method");
-        }
+        // THE FIX: Use Instrumentation to call onCreate properly
+        log("Invoking Instrumentation.callActivityOnCreate()...");
+        realInstrumentation.callActivityOnCreate(targetActivity, null);
 
         VirtualWindowHelper.forceInjectField(targetActivity, "mApplication", getApplication());
-
         setContentView(targetActivity.getWindow().getDecorView());
-        
         isActivityLaunched = true;
         log("GAME ENGINE RENDERED!");
     }
@@ -489,19 +441,16 @@ public class StubActivity extends Activity {
     private void showFloatingPanel() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) return;
-
             windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
             int type = Build.VERSION.SDK_INT >= 26
                     ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                     : WindowManager.LayoutParams.TYPE_PHONE;
-
             TextView logo = new TextView(this);
             logo.setText("T");
             logo.setTextColor(Color.WHITE);
             logo.setTextSize(24);
             logo.setGravity(Gravity.CENTER);
             logo.setBackgroundColor(Color.parseColor("#FF2200"));
-
             final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                     120, 120, type,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
@@ -509,7 +458,6 @@ public class StubActivity extends Activity {
             lp.gravity = Gravity.TOP | Gravity.LEFT;
             lp.x = 50;
             lp.y = 300;
-
             windowManager.addView(logo, lp);
             floatingPanelView = logo;
         } catch (Throwable t) {}
@@ -517,15 +465,21 @@ public class StubActivity extends Activity {
 
     private void destroyFloatingPanel() {
         try {
-            if (windowManager != null && floatingPanelView != null) windowManager.removeView(floatingPanelView);
+            if (windowManager != null && floatingPanelView != null) {
+                windowManager.removeView(floatingPanelView);
+            }
         } catch (Throwable t) {}
     }
 
     public static class HardwareSpoofer {
         public static void spoofHardware() {
             try {
-                Field field = Build.class.getDeclaredField("MODEL"); field.setAccessible(true); field.set(null, "SM-S928B");
-                Field field2 = Build.class.getDeclaredField("BRAND"); field2.setAccessible(true); field2.set(null, "samsung");
+                Field field = Build.class.getDeclaredField("MODEL");
+                field.setAccessible(true);
+                field.set(null, "SM-S928B");
+                Field field2 = Build.class.getDeclaredField("BRAND");
+                field2.setAccessible(true);
+                field2.set(null, "samsung");
             } catch (Exception e) {}
         }
     }
@@ -540,4 +494,32 @@ public class StubActivity extends Activity {
             try {
                 AssetManager assets = AssetManager.class.newInstance();
                 Method addAssetPath = AssetManager.class.getMethod("addAssetPath", String.class);
-                addAssetPath.invoke(
+                addAssetPath.invoke(assets, base.getPackageManager().getApplicationInfo(targetPkg, 0).sourceDir);
+                targetRes = new Resources(assets, base.getResources().getDisplayMetrics(), base.getResources().getConfiguration());
+            } catch (Exception e) {}
+        }
+
+        @Override
+        public Resources getResources() {
+            return targetRes != null ? targetRes : super.getResources();
+        }
+
+        @Override
+        public Context getApplicationContext() {
+            return this;
+        }
+
+        @Override
+        public String getPackageName() {
+            return targetPkg;
+        }
+
+        @Override
+        public Object getSystemService(String name) {
+            if (Context.LAYOUT_INFLATER_SERVICE.equals(name)) {
+                return super.getSystemService(name);
+            }
+            return super.getSystemService(name);
+        }
+    }
+}
