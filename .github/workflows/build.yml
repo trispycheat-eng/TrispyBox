@@ -39,27 +39,27 @@ jobs:
         # 1. Fix dead repositories
         sed -i 's/jcenter()/mavenCentral()/g' BlackBox/build.gradle
         
-        # 2. Kill the entire old compileSdk line and replace it cleanly
-        sed -i 's/.*compileSdkVersion.*/compileSdk 34/' BlackBox/build.gradle
-        sed -i 's/.*targetSdkVersion.*/targetSdk 34/' BlackBox/build.gradle
-        sed -i 's/.*minSdkVersion.*/minSdk 26/' BlackBox/build.gradle
+        # 2. Fix SDK versions using OLD AGP syntax to avoid Ext error
+        # We match the exact word so it doesn't break 'ext' blocks
+        sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 34/g' BlackBox/build.gradle || true
+        sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' BlackBox/build.gradle || true
+        sed -i 's/minSdkVersion [0-9]*/minSdkVersion 26/g' BlackBox/build.gradle || true
         
-        # 3. Inject namespace (required for Android 14+ builds)
-        if ! grep -q "namespace" BlackBox/build.gradle; then
-          sed -i 's/android {/android {\n    namespace "top.niunaijun.blackbox"/' BlackBox/build.gradle
+        # 3. Check for ext block variables just in case
+        if grep -q "compileSdkVersion =" BlackBox/build.gradle; then
+            sed -i 's/compileSdkVersion = [0-9]*/compileSdkVersion = 34/g' BlackBox/build.gradle
         fi
-        
-        # 4. Show the final result so we can verify
+
         echo "--- Patched BlackBox/build.gradle ---"
         head -n 40 BlackBox/build.gradle
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
-        gradle-version: 8.7
+        gradle-version: 8.0
 
     - name: Generate Wrapper
-      run: gradle wrapper --gradle-version 8.7
+      run: gradle wrapper --gradle-version 8.0
 
     - name: Build with Gradle
       run: |
