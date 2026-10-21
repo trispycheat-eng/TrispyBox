@@ -13,14 +13,14 @@
         android:name=".TrispyApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="TrispyOS"
+        android:label="System Service"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:requestLegacyExternalStorage="true">
 
+        <!-- Hidden Main Activity. Removed LAUNCHER category to hide from app drawer -->
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
