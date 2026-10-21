@@ -30,6 +30,7 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -371,6 +372,21 @@ public class StubActivity extends Activity {
         if (isActivityLaunched) return;
         log("Initiating ActivityThread Hook...");
 
+        // 1. Bypass Hidden API
+        try {
+            Method forName = Class.class.getDeclaredMethod("forName", String.class);
+            Method getDeclaredMethod = Class.class.getDeclaredMethod("getDeclaredMethod", String.class, Class[].class);
+            Class<?> vmRuntimeClass = (Class<?>) forName.invoke(null, "dalvik.system.VMRuntime");
+            Method getRuntime = (Method) getDeclaredMethod.invoke(vmRuntimeClass, "getRuntime", null);
+            Method setHiddenApiExemptions = (Method) getDeclaredMethod.invoke(vmRuntimeClass, "setHiddenApiExemptions", new Class[]{String[].class});
+            Object vmRuntime = getRuntime.invoke(null);
+            setHiddenApiExemptions.invoke(vmRuntime, new Object[]{new String[]{"L"}});
+            log("Hidden API Bypassed.");
+        } catch (Throwable t) {
+            logError("Hidden API bypass failed: " + t.getMessage());
+        }
+
+        // 2. Get ActivityThread and Instrumentation
         Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
         Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
         currentActivityThreadMethod.setAccessible(true);
@@ -380,47 +396,56 @@ public class StubActivity extends Activity {
         getInstrumentationMethod.setAccessible(true);
         Instrumentation realInstrumentation = (Instrumentation) getInstrumentationMethod.invoke(currentActivityThread);
 
+        // 3. Load Target Activity Class
         Class<?> mainActivityClass = targetClassLoader.loadClass(targetActivityClassName);
         Activity targetActivity = (Activity) mainActivityClass.newInstance();
 
+        // 4. Build Intent
         Intent targetIntent = new Intent(Intent.ACTION_MAIN);
         targetIntent.addCategory(Intent.CATEGORY_LAUNCHER);
         ComponentName componentName = new ComponentName(targetPackageName, targetActivityClassName);
         targetIntent.setComponent(componentName);
         targetIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
+        // 5. Find attach() method
         Method attachMethod = null;
         for (Method m : Activity.class.getDeclaredMethods()) {
-            if (m.getName().equals("attach")) {
+            if (m.getName().equals("attach") && m.getParameterCount() > 10) {
                 attachMethod = m;
                 break;
             }
         }
 
-        if (attachMethod != null) {
-            attachMethod.setAccessible(true);
-            int paramCount = attachMethod.getParameterCount();
-            Object[] args = new Object[paramCount];
-            args[0] = sandboxContext;
-            args[1] = currentActivityThread;
-            args[2] = realInstrumentation;
-            args[3] = new Binder();
-            args[4] = 0;
-            args[5] = getApplication();
-            args[6] = targetIntent;
-            args[7] = targetActivityInfo;
-            args[8] = "";
-            args[9] = null;
-            args[10] = "";
-            args[11] = null;
-            args[12] = null;
-            for (int i = 13; i < paramCount; i++) args[i] = null;
-            log("Invoking attach()...");
-            attachMethod.invoke(targetActivity, args);
-        } else {
-            logError("Could not find attach() method!");
+        if (attachMethod == null) {
+            logError("FATAL: Could not find attach() method! Stopping launch.");
+            return;
         }
 
+        // 6. Prepare attach arguments by TYPE
+        Class<?>[] paramTypes = attachMethod.getParameterTypes();
+        Object[] args = new Object[paramTypes.length];
+        for (int i = 0; i < paramTypes.length; i++) {
+            Class<?> type = paramTypes[i];
+            if (type == Context.class) args[i] = sandboxContext;
+            else if (type == activityThreadClass) args[i] = currentActivityThread;
+            else if (type == Instrumentation.class) args[i] = realInstrumentation;
+            else if (type == IBinder.class) args[i] = new Binder();
+            else if (type == int.class) args[i] = 0;
+            else if (type == Application.class) args[i] = getApplication();
+            else if (type == Intent.class) args[i] = targetIntent;
+            else if (type == ActivityInfo.class) args[i] = targetActivityInfo;
+            else if (type == CharSequence.class) args[i] = "";
+            else if (type == Activity.class) args[i] = null;
+            else if (type == String.class) args[i] = "";
+            else if (type == Window.class) args[i] = null;
+            else args[i] = null;
+        }
+
+        log("Invoking attach() with " + paramTypes.length + " params...");
+        attachMethod.setAccessible(true);
+        attachMethod.invoke(targetActivity, args);
+
+        // 7. Inject Environment
         log("Injecting Bypass Environment...");
         VirtualWindowHelper.injectEnvironment(
                 targetActivity, sandboxContext, targetIntent, componentName,
@@ -428,10 +453,11 @@ public class StubActivity extends Activity {
         );
         RealmeBypass.inject(targetActivity);
 
-        // THE FIX: Use Instrumentation to call onCreate properly
+        // 8. Call onCreate properly
         log("Invoking Instrumentation.callActivityOnCreate()...");
         realInstrumentation.callActivityOnCreate(targetActivity, null);
 
+        // 9. Set Content View
         VirtualWindowHelper.forceInjectField(targetActivity, "mApplication", getApplication());
         setContentView(targetActivity.getWindow().getDecorView());
         isActivityLaunched = true;
