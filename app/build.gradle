@@ -34,6 +34,8 @@ android {
 }
 
 dependencies {
+    // Link to the engine and reflection modules dynamically
     implementation project(':Bcore')
+    implementation project(':black-reflection')
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
