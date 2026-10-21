@@ -2,34 +2,47 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.android.system.service">
 
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Permissions for VM and Floating Panel -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    
-    <!-- MAGIC PERMISSION TO READ THE REAL OBB FOLDER -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
+    <!-- Required to query other apps (Free Fire, Play Store, etc) on Android 11+ -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+        </intent>
+        <package android:name="com.dts.freefiremax" />
+        <package android:name="com.dts.freefireth" />
+        <package android:name="com.android.vending" />
+    </queries>
 
     <application
-        android:name=".App"
         android:allowBackup="true"
-        android:icon="@drawable/ic_logo"
-        android:label="System Service"
-        android:requestLegacyExternalStorage="true"
-        android:theme="@style/Theme.AppCompat.NoActionBar">
-        
-        <activity android:name=".MainActivity" android:exported="true">
+        android:icon="@mipmap/ic_launcher"
+        android:label="TrispyBox"
+        android:theme="@style/Theme.AppCompat.NoActionBar"
+        android:requestLegacyExternalStorage="true">
+
+        <!-- Our New VPhoneGaGa Style Launcher -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <activity android:name=".SettingsActivity" />
-        <activity android:name=".FileManagerActivity" android:exported="false" />
-        <activity android:name=".StubActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
-        <activity android:name=".CrashActivity" android:exported="false" />
+        <!-- Keep this for later, the Play Store will use it -->
+        <activity
+            android:name=".StubActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
     </application>
+
 </manifest>
