@@ -10,8 +10,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' }
     }
 }
 rootProject.name = "TrispyBox"
 include ':app'
+
+// Include the local BlackBox engine we just extracted
+include ':BlackBox'
+project(':BlackBox').projectDir = new File(settingsDir, 'BlackBox')
