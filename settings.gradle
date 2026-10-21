@@ -17,6 +17,9 @@ dependencyResolutionManagement {
 rootProject.name = "TrispyBox"
 include ':app'
 
-// LINK DIRECTLY TO THE CORE ENGINE
+// Include ALL THREE BlackBox modules
 include ':Bcore'
 project(':Bcore').projectDir = new File(settingsDir, 'BlackBox/Bcore')
+
+include ':black-reflection'
+project(':black-reflection').projectDir = new File(settingsDir, 'BlackBox/black-reflection')
