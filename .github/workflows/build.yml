@@ -30,6 +30,7 @@ jobs:
         
         mkdir -p BlackBox
         
+        # Safely extract regardless of zip structure
         if [ -d "BlackBox_tmp/app" ]; then
             mv BlackBox_tmp/* BlackBox/
         elif [ -d "BlackBox_tmp/BlackBox-2.1.0/app" ]; then
@@ -39,54 +40,70 @@ jobs:
         fi
         rm -rf BlackBox_tmp
 
-    - name: Patch All BlackBox Modules
+    - name: Generate Settings Gradle & Patch Modules
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        build_files = glob.glob('BlackBox/*/build.gradle')
-        build_files.append('BlackBox/build.gradle')
+        # 1. DYNAMICALLY GENERATE SETTINGS.GRADLE
+        modules = []
+        for root, dirs, files in os.walk('BlackBox'):
+            if 'build.gradle' in files and root != 'BlackBox':
+                mod_path = root.replace('BlackBox/', '')
+                mod_name = mod_path.replace('/', ':')
+                modules.append((mod_name, mod_path))
 
-        for module_gradle in build_files:
-            if not os.path.exists(module_gradle): continue
+        with open('settings.gradle', 'w') as f:
+            f.write("pluginManagement {\n    repositories {\n        google()\n        mavenCentral()\n        gradlePluginPortal()\n    }\n    plugins {\n        id 'org.jetbrains.kotlin.android' version '1.8.10' apply false\n    }\n}\n")
+            f.write("dependencyResolutionManagement {\n    repositories {\n        google()\n        mavenCentral()\n    }\n}\n")
+            f.write("rootProject.name = \"TrispyBox\"\n")
+            f.write("include ':app'\n")
             
-            print(f"Patching {module_gradle}...")
+            for mod_name, mod_path in modules:
+                if mod_name == 'app': continue # Skip BlackBox demo app
+                f.write(f"include ':{mod_name}'\n")
+                f.write(f"project(':{mod_name}').projectDir = new File(settingsDir, 'BlackBox/{mod_path}')\n")
+        
+        print("Dynamically generated settings.gradle with all modules.")
+
+        # 2. PATCH ALL BUILD.GRADLE FILES
+        build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
+        for module_gradle in build_files:
             with open(module_gradle, 'r') as f:
                 content = f.read()
 
-            # 1. Force Library
+            # Force Library
             content = content.replace("com.android.application", "com.android.library")
             
-            # 2. Remove applicationId
+            # Remove applicationId
             content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
             
-            # 3. Fix jcenter
+            # Fix dead jcenter
             content = content.replace('jcenter()', 'mavenCentral()')
             
-            # 4. Brutally replace SDK lines
+            # Fix SDK versions
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 34', content)
             content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
             content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 34', content)
 
-            # 5. THE FIX: Nuke the entire broken string line for BlackReflection
-            # It looks for lines containing "com.github.CodingGay.BlackReflection" and replaces the whole line
-            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "implementation project(':black-reflection')", content)
-            
-            # Replace other rootProject.ext variables
-            content = content.replace('rootProject.ext.compileSdkVersion', '34')
-            content = content.replace('rootProject.ext.minSdkVersion', '26')
-            content = content.replace('rootProject.ext.targetSdkVersion', '34')
+            # Fix NDK version (Force runner to use pre-installed NDK)
+            content = re.sub(r'ndkVersion\s+["\'][^"\']+["\']', 'ndkVersion "25.1.8937393"', content)
 
-            # 6. Fix Kotlin Plugin
+            # Fix BlackReflection dependency
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "implementation project(':black-reflection')", content)
+            content = content.replace('rootProject.ext.blackReflection', "project(':black-reflection')")
+
+            # Fix Kotlin Plugin
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-            # 7. Add namespace if missing
+            # Add Namespace
             if 'namespace ' not in content and 'android {' in content:
-                module_name = os.path.basename(os.path.dirname(module_gradle))
-                content = content.replace('android {', f'android {{\n    namespace "top.niunaijun.{module_name}"')
+                safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
+                if safe_name == "BlackBox": safe_name = "core"
+                content = content.replace('android {', f'android {{\n    namespace "top.niunaijun.{safe_name}"')
 
             with open(module_gradle, 'w') as f:
                 f.write(content)
