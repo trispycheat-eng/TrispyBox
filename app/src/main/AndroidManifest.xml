@@ -17,7 +17,7 @@
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:requestLegacyExternalStorage="true">
 
-        <!-- Hidden Main Activity. Removed LAUNCHER category to hide from app drawer -->
+        <!-- Hidden Main Activity -->
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -27,5 +27,13 @@
         <activity android:name=".PlayStoreActivity" android:exported="false" />
         <activity android:name=".SettingsActivity" android:exported="false" />
         
+        <!-- THE SECRET DIALER CODE (*#*#1234#*#*) -->
+        <receiver android:name=".SecretCodeReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SECRET_CODE" />
+                <data android:scheme="android_secret_code" android:host="1234" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
