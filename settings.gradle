@@ -14,6 +14,6 @@ dependencyResolutionManagement {
 rootProject.name = "TrispyBox"
 include ':app'
 
-// Local Module Integration
+// Point directly to the app module inside the BlackBox folder
 include ':BlackBox'
-project(':BlackBox').projectDir = new File(settingsDir, 'BlackBox')
+project(':BlackBox').projectDir = new File(settingsDir, 'BlackBox/app')
