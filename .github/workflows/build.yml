@@ -78,55 +78,42 @@ jobs:
         project(':black-reflection').projectDir = new File(settingsDir, 'BlackBox/black-reflection')
         EOF
 
-    - name: Patch All Modules & Overwrite Black-Reflection
+    - name: Patch All Modules (Force Android Library)
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        # 1. OVERWRITE black-reflection COMPLETELY TO BE AN ANDROID LIBRARY
-        br_file = 'BlackBox/black-reflection/build.gradle'
-        if os.path.exists(br_file):
-            with open(br_file, 'w') as f:
-                f.write("""
-        plugins {
-            id 'com.android.library'
-        }
-        android {
-            namespace 'top.niunaijun.blackreflection'
-            compileSdk 34
-            defaultConfig {
-                minSdk 26
-                targetSdk 34
-            }
-            compileOptions {
-                sourceCompatibility JavaVersion.VERSION_1_8
-                targetCompatibility JavaVersion.VERSION_1_8
-            }
-        }
-                """)
-
-        # 2. PATCH ALL OTHER MODULES
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
         for module_gradle in build_files:
-            if not os.path.exists(module_gradle) or 'black-reflection' in module_gradle: continue
+            if not os.path.exists(module_gradle): continue
+            
+            module_dir = os.path.dirname(module_gradle)
+            manifest_dir = os.path.join(module_dir, 'src/main')
+            manifest_path = os.path.join(manifest_dir, 'AndroidManifest.xml')
+            
+            # 1. Create AndroidManifest if it doesn't exist
+            os.makedirs(manifest_dir, exist_ok=True)
+            if not os.path.exists(manifest_path):
+                with open(manifest_path, 'w') as f:
+                    f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
             
             with open(module_gradle, 'r') as f:
                 content = f.read()
 
-            # Force Android Library
+            # 2. Force Android Library
             content = content.replace("com.android.application", "com.android.library")
             content = content.replace("apply plugin: 'java-library'", "apply plugin: 'com.android.library'")
             content = content.replace("id 'java-library'", "id 'com.android.library'")
             
-            # Remove applicationId
+            # 3. Remove applicationId
             content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
             
-            # Fix dead jcenter
+            # 4. Fix jcenter
             content = content.replace('jcenter()', 'mavenCentral()')
             
-            # Replace rootProject.ext variables
+            # 5. Replace rootProject.ext variables
             content = content.replace('rootProject.ext.compileSdkVersion', '34')
             content = content.replace('rootProject.ext.buildToolsVersion', '"34.0.0"')
             content = content.replace('rootProject.ext.minSdkVersion', '26')
@@ -135,28 +122,32 @@ jobs:
             content = content.replace('rootProject.ext.blackReflection', "project(':black-reflection')")
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
 
-            # Clean up leftovers
+            # 6. Clean up leftovers
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 34', content)
             content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
             content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 34', content)
             content = re.sub(r'buildToolsVersion\s+[^=\n]+', 'buildToolsVersion "34.0.0"', content)
             content = re.sub(r'ndkVersion\s+[^=\n]+', 'ndkVersion "25.1.8937393"', content)
 
-            # Fix BlackReflection dependency string
+            # 7. Fix BlackReflection dependency string
             content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "implementation project(':black-reflection')", content)
 
-            # Fix Kotlin Plugin
+            # 8. Fix Kotlin Plugin
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-            # Add Namespace
-            safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
+            # 9. Add namespace and android block
+            safe_name = os.path.basename(module_dir).replace('-', '_')
             if safe_name == "BlackBox" or safe_name == "": safe_name = "core"
             
             if 'android {' not in content:
                 content += f"\nandroid {{\n    namespace 'top.niunaijun.{safe_name}'\n    compileSdk 34\n    defaultConfig {{\n        minSdk 26\n        targetSdk 34\n    }}\n    compileOptions {{\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n    }}\n}}\n"
             elif 'namespace ' not in content:
                 content = content.replace('android {', f'android {{\n    namespace "top.niunaijun.{safe_name}"')
+
+            # 10. Inject matchingFallbacks to prevent strict variant matching
+            if 'buildTypes {' not in content and 'android {' in content:
+                content = content.replace('android {', 'android {\n    buildTypes {\n        debug { matchingFallbacks = [\'debug\', \'release\'] }\n        release { matchingFallbacks = [\'release\', \'debug\'] }\n    }')
 
             with open(module_gradle, 'w') as f:
                 f.write(content)
