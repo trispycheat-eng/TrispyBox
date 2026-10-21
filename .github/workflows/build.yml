@@ -24,31 +24,27 @@ jobs:
 
     - name: Unzip and Force Folder Structure
       run: |
-        echo "Extracting and enforcing BlackBox/app structure..."
+        echo "Extracting..."
         mkdir -p BlackBox_tmp
         unzip -q BlackBox.zip -d BlackBox_tmp
         
         mkdir -p BlackBox/app
         
-        # Check if the zip extracted an 'app' folder directly
         if [ -d "BlackBox_tmp/app" ]; then
             mv BlackBox_tmp/* BlackBox/
-        # Check if there's a nested folder like 'BlackBox-2.1.0/app'
         elif [ -d "BlackBox_tmp/BlackBox-2.1.0/app" ]; then
             mv BlackBox_tmp/BlackBox-2.1.0/* BlackBox/
-        # Otherwise, assume everything is the module and move it to app/
         else
             mv BlackBox_tmp/* BlackBox/app/
         fi
         rm -rf BlackBox_tmp
 
-    - name: Patch BlackBox Module Gradle (Python)
+    - name: Patch BlackBox Gradle (Python Safe)
       run: |
         python3 - << 'EOF'
         import os
         import re
 
-        # The actual module is inside the app folder
         module_gradle = 'BlackBox/app/build.gradle'
         
         if not os.path.exists(module_gradle):
@@ -72,7 +68,12 @@ jobs:
         content = re.sub(r'minSdkVersion\s*[=\s]\s*\d+', 'minSdkVersion 26', content)
         content = re.sub(r'targetSdkVersion\s*[=\s]\s*\d+', 'targetSdkVersion 34', content)
 
-        # 5. Add namespace if missing
+        # 5. Fix Kotlin Plugin IDs
+        content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
+        content = content.replace("id \"kotlin-android\"", "id 'org.jetbrains.kotlin.android'")
+        content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
+
+        # 6. Add namespace if missing
         if 'namespace ' not in content:
             content = content.replace('android {', 'android {\n    namespace "top.niunaijun.blackbox"')
 
