@@ -5,7 +5,6 @@ pluginManagement {
         gradlePluginPortal()
     }
     plugins {
-        // FORCE GRADLE TO RECOGNIZE THE KOTLIN PLUGIN
         id 'org.jetbrains.kotlin.android' version '1.8.10' apply false
     }
 }
@@ -18,6 +17,6 @@ dependencyResolutionManagement {
 rootProject.name = "TrispyBox"
 include ':app'
 
-// Point directly to the app module inside the BlackBox folder
-include ':BlackBox'
-project(':BlackBox').projectDir = new File(settingsDir, 'BlackBox/app')
+// LINK DIRECTLY TO THE CORE ENGINE
+include ':Bcore'
+project(':Bcore').projectDir = new File(settingsDir, 'BlackBox/Bcore')
