@@ -34,7 +34,7 @@ jobs:
         fi
         rm -rf BlackBox_tmp
 
-    - name: Patch BlackBox Gradle to Library
+    - name: Patch BlackBox Gradle (Python Safe)
       run: |
         python3 - << 'EOF'
         import re
@@ -51,18 +51,30 @@ jobs:
             # 3. Fix dead jcenter
             content = content.replace('jcenter()', 'mavenCentral()')
             
-            # 4. Fix SDK variables
-            content = re.sub(r'compileSdkVersion\s*[=\s]\s*\d+', 'compileSdkVersion 34', content)
-            content = re.sub(r'minSdkVersion\s*[=\s]\s*\d+', 'minSdkVersion 26', content)
-            content = re.sub(r'targetSdkVersion\s*[=\s]\s*\d+', 'targetSdkVersion 34', content)
+            # 4. Fix SDK versions SAFELY (preserving = signs for ext blocks)
+            # Replace assignments (with =)
+            content = re.sub(r'compileSdkVersion\s*=\s*\d+', 'compileSdkVersion = 34', content)
+            content = re.sub(r'minSdkVersion\s*=\s*\d+', 'minSdkVersion = 26', content)
+            content = re.sub(r'targetSdkVersion\s*=\s*\d+', 'targetSdkVersion = 34', content)
+            content = re.sub(r'buildToolsVersion\s*=\s*["\']?[\d\.]+["\']?', 'buildToolsVersion = "34.0.0"', content)
+            
+            # Replace direct block values (without =)
+            content = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 34', content)
+            content = re.sub(r'minSdkVersion\s+\d+', 'minSdkVersion 26', content)
+            content = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 34', content)
+            content = re.sub(r'buildToolsVersion\s+["\']?[\d\.]+["\']?', 'buildToolsVersion "34.0.0"', content)
 
             # 5. Add namespace if missing
             if 'namespace ' not in content:
                 content = content.replace('android {', 'android {\n    namespace "top.niunaijun.blackbox"')
 
+            # 6. Inject lintOptions to ignore old code errors
+            if 'lintOptions' not in content:
+                content = content.replace('android {', 'android {\n    lintOptions {\n        abortOnError false\n    }')
+
             with open('BlackBox/build.gradle', 'w') as f:
                 f.write(content)
-            print("Converted BlackBox to Library successfully.")
+            print("Patched BlackBox build.gradle successfully.")
         except Exception as e:
             print("Patch error:", e)
         EOF
@@ -71,7 +83,7 @@ jobs:
       run: |
         echo "android.useAndroidX=true" >> gradle.properties
         echo "android.enableJetifier=true" >> gradle.properties
-        echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8" >> gradle.properties
+        echo "org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8" >> gradle.properties
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
