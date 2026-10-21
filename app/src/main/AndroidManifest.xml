@@ -2,47 +2,30 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.android.system.service">
 
-    <!-- Permissions for VM and Floating Panel -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-
-    <!-- Required to query other apps (Free Fire, Play Store, etc) on Android 11+ -->
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.MAIN" />
-        </intent>
-        <package android:name="com.dts.freefiremax" />
-        <package android:name="com.dts.freefireth" />
-        <package android:name="com.android.vending" />
-    </queries>
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <application
+        android:name=".TrispyApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="TrispyBox"
-        android:theme="@style/Theme.AppCompat.NoActionBar"
+        android:label="TrispyOS"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:requestLegacyExternalStorage="true">
 
-        <!-- Our New VPhoneGaGa Style Launcher -->
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden">
+        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- Keep this for later, the Play Store will use it -->
-        <activity
-            android:name=".StubActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
-
+        <activity android:name=".PlayStoreActivity" android:exported="false" />
+        <activity android:name=".SettingsActivity" android:exported="false" />
+        
     </application>
-
 </manifest>
