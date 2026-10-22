@@ -34,9 +34,7 @@ android {
 }
 
 dependencies {
+    // ONLY link Bcore. It handles the rest internally.
     implementation project(':Bcore')
-    // Point back to local projects
-    implementation project(':black-reflection')
-    implementation project(':android-mirror')
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
