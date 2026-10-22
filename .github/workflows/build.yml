@@ -39,7 +39,7 @@ jobs:
         fi
         rm -rf BlackBox_tmp
 
-    - name: Generate Root Build Files (Gradle 7.4.2)
+    - name: Generate Root Build Files (With ext block)
       run: |
         cat << 'EOF' > build.gradle
         buildscript {
@@ -58,6 +58,15 @@ jobs:
                 mavenCentral()
                 maven { url 'https://jitpack.io' }
             }
+        }
+        ext {
+            blackReflection = "com.github.CodingGay.BlackReflection:core:1.3.1"
+            androidXCoreVersion = "1.9.0"
+            compileSdkVersion = 33
+            buildToolsVersion = "33.0.0"
+            minSdkVersion = 26
+            targetSdkVersion = 33
+            ndkVersion = "25.1.8937393"
         }
         EOF
 
@@ -78,7 +87,7 @@ jobs:
         project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
         EOF
 
-    - name: Patch ALL Modules (Fix Dependencies & Repositories)
+    - name: Patch ALL Modules (Fix Dependencies)
       run: |
         python3 - << 'EOF'
         import os
@@ -93,7 +102,7 @@ jobs:
             with open(module_gradle, 'r') as f:
                 content = f.read()
 
-            # 1. Completely strip out any repositories block (fixes the repository warning)
+            # 1. Completely strip out any repositories block
             content = re.sub(r'repositories\s*\{[\s\S]*?\}', '', content)
 
             # 2. Force Android Library
@@ -101,34 +110,24 @@ jobs:
             
             # 3. Remove applicationId
             content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
-            
-            # 4. Replace rootProject.ext variables
-            content = content.replace('rootProject.ext.compileSdkVersion', '33')
-            content = content.replace('rootProject.ext.buildToolsVersion', '"33.0.0"')
-            content = content.replace('rootProject.ext.minSdkVersion', '26')
-            content = content.replace('rootProject.ext.targetSdkVersion', '33')
-            content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
-            content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
 
-            # 5. Swap missing local projects for JitPack Maven libraries
+            # 4. Swap missing local projects for JitPack Maven libraries
             content = content.replace("project(':black-reflection')", "'com.github.CodingGay.BlackReflection:core:1.3.1'")
             content = content.replace("project(':android-mirror')", "'com.github.tiann:FreeReflection:3.1.0'")
             content = content.replace("me.weishu:free_reflection:3.0.1", "com.github.tiann:FreeReflection:3.1.0")
+            
+            # 5. Handle broken strings
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api 'com.github.CodingGay.BlackReflection:core:1.3.1'", content)
+            content = re.sub(r'.*me\.weishu:free_reflection.*', "api 'com.github.tiann:FreeReflection:3.1.0'", content)
 
-            # 6. Clean up SDK versions
-            content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 33', content)
-            content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
-            content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 33', content)
-            content = re.sub(r'buildToolsVersion\s+[^=\n]+', 'buildToolsVersion "33.0.0"', content)
-
-            # 7. Fix Kotlin Plugin
+            # 6. Fix Kotlin Plugin
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
             with open(module_gradle, 'w') as f:
                 f.write(content)
 
-        print("Patched successfully. Left AndroidManifests untouched.")
+        print("Patched successfully. Root ext block injected.")
         EOF
 
     - name: Force AndroidX and Jetifier
