@@ -39,6 +39,26 @@ jobs:
         fi
         rm -rf BlackBox_tmp
 
+    - name: Download and Compile Missing Reflection JARs
+      run: |
+        echo "Cloning reflection sources..."
+        rm -rf BlackBox/black-reflection BlackBox/android-mirror
+        git clone --depth 1 https://github.com/CodingGay/BlackReflection.git BlackBox/black-reflection
+        git clone --depth 1 https://github.com/tiann/FreeReflection.git BlackBox/android-mirror
+
+        echo "Compiling black-reflection.jar..."
+        mkdir -p libs
+        mkdir -p build/black-reflection
+        find BlackBox/black-reflection -name "*.java" > sources.txt
+        javac -source 8 -target 8 -d build/black-reflection @sources.txt
+        jar -cf libs/black-reflection.jar -C build/black-reflection .
+
+        echo "Compiling android-mirror.jar..."
+        mkdir -p build/android-mirror
+        find BlackBox/android-mirror -name "*.java" > sources2.txt
+        javac -source 8 -target 8 -cp libs/black-reflection.jar -d build/android-mirror @sources2.txt
+        jar -cf libs/android-mirror.jar -C build/android-mirror .
+
     - name: Generate Root Build Files (With ext block)
       run: |
         cat << 'EOF' > build.gradle
@@ -56,7 +76,6 @@ jobs:
             repositories {
                 google()
                 mavenCentral()
-                maven { url 'https://jitpack.io' }
             }
         }
         ext {
@@ -87,7 +106,7 @@ jobs:
         project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
         EOF
 
-    - name: Patch ALL Modules (Fix Dependencies)
+    - name: Patch ALL Modules (Use Local JARs)
       run: |
         python3 - << 'EOF'
         import os
@@ -111,23 +130,25 @@ jobs:
             # 3. Remove applicationId
             content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
 
-            # 4. Swap missing local projects for JitPack Maven libraries
-            content = content.replace("project(':black-reflection')", "'com.github.CodingGay.BlackReflection:core:1.3.1'")
-            content = content.replace("project(':android-mirror')", "'com.github.tiann:FreeReflection:3.1.0'")
-            content = content.replace("me.weishu:free_reflection:3.0.1", "com.github.tiann:FreeReflection:3.1.0")
+            # 4. Replace missing projects with our local compiled JARs
+            jar_br = 'api files("${rootDir}/libs/black-reflection.jar")'
+            jar_am = 'api files("${rootDir}/libs/android-mirror.jar")'
             
-            # 5. Handle broken strings
-            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api 'com.github.CodingGay.BlackReflection:core:1.3.1'", content)
-            content = re.sub(r'.*me\.weishu:free_reflection.*', "api 'com.github.tiann:FreeReflection:3.1.0'", content)
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', jar_br, content)
+            content = re.sub(r'.*me\.weishu:free_reflection.*', jar_am, content)
+            content = content.replace("project(':black-reflection')", jar_br)
+            content = content.replace("project(':android-mirror')", jar_am)
+            
+            content = content.replace('rootProject.ext.blackReflection', "'com.github.CodingGay.BlackReflection:core:1.3.1'")
 
-            # 6. Fix Kotlin Plugin
+            # 5. Fix Kotlin Plugin
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
             with open(module_gradle, 'w') as f:
                 f.write(content)
 
-        print("Patched successfully. Root ext block injected.")
+        print("Patched successfully. Using local JARs.")
         EOF
 
     - name: Force AndroidX and Jetifier
