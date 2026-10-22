@@ -81,75 +81,31 @@ jobs:
         project(':Bcore:pine-xposed').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed')
         include ':Bcore:pine-xposed-res'
         project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
-        include ':android-mirror'
-        project(':android-mirror').projectDir = new File(settingsDir, 'BlackBox/android-mirror')
-        include ':black-reflection'
-        project(':black-reflection').projectDir = new File(settingsDir, 'BlackBox/black-reflection')
         EOF
 
-    - name: Force Android Library Attributes
+    - name: Compile Reflection JARs Manually
+      run: |
+        echo "Compiling black-reflection..."
+        mkdir -p BlackBox/Bcore/libs
+        mkdir -p build/black-reflection
+        find BlackBox/black-reflection/src/main/java -name "*.java" > sources.txt
+        javac -source 8 -target 8 -d build/black-reflection @sources.txt
+        jar -cf BlackBox/Bcore/libs/black-reflection.jar -C build/black-reflection .
+
+        echo "Compiling android-mirror..."
+        mkdir -p build/android-mirror
+        find BlackBox/android-mirror/src/main/java -name "*.java" > sources2.txt
+        javac -source 8 -target 8 -cp BlackBox/Bcore/libs/black-reflection.jar -d build/android-mirror @sources2.txt
+        jar -cf BlackBox/Bcore/libs/android-mirror.jar -C build/android-mirror .
+
+    - name: Patch Bcore Gradle
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        # 1. OVERWRITE black-reflection AS ANDROID LIBRARY
-        br_dir = 'BlackBox/black-reflection'
-        if os.path.exists(br_dir):
-            os.makedirs(os.path.join(br_dir, 'src/main'), exist_ok=True)
-            with open(os.path.join(br_dir, 'src/main/AndroidManifest.xml'), 'w') as f:
-                f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
-            
-            with open(os.path.join(br_dir, 'build.gradle'), 'w') as f:
-                f.write("""
-        plugins {
-            id 'com.android.library'
-        }
-        android {
-            namespace 'top.niunaijun.blackreflection'
-            compileSdk 33
-            defaultConfig {
-                minSdk 26
-                targetSdk 33
-            }
-            compileOptions {
-                sourceCompatibility JavaVersion.VERSION_1_8
-                targetCompatibility JavaVersion.VERSION_1_8
-            }
-        }
-                """)
-
-        # 2. OVERWRITE android-mirror AS ANDROID LIBRARY
-        am_dir = 'BlackBox/android-mirror'
-        if os.path.exists(am_dir):
-            os.makedirs(os.path.join(am_dir, 'src/main'), exist_ok=True)
-            with open(os.path.join(am_dir, 'src/main/AndroidManifest.xml'), 'w') as f:
-                f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
-
-            with open(os.path.join(am_dir, 'build.gradle'), 'w') as f:
-                f.write("""
-        plugins {
-            id 'com.android.library'
-        }
-        android {
-            namespace 'top.niunaijun.androidmirror'
-            compileSdk 33
-            defaultConfig {
-                minSdk 26
-                targetSdk 33
-            }
-            compileOptions {
-                sourceCompatibility JavaVersion.VERSION_1_8
-                targetCompatibility JavaVersion.VERSION_1_8
-            }
-        }
-        dependencies {
-            implementation project(':black-reflection')
-        }
-                """)
-
-        # 3. PATCH REMAINING MODULES (Bcore, black-fake, etc.)
+        # PATCH REMAINING ANDROID MODULES
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
         for module_gradle in build_files:
             if not os.path.exists(module_gradle) or 'black-reflection' in module_gradle or 'android-mirror' in module_gradle: continue
@@ -174,9 +130,11 @@ jobs:
             content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
 
-            # Nuke broken strings and replace with local projects
-            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api project(':black-reflection')", content)
-            content = re.sub(r'.*me\.weishu:free_reflection.*', "api project(':android-mirror')", content)
+            # Load the JARs we just compiled
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api files('libs/black-reflection.jar')", content)
+            content = re.sub(r'.*me\.weishu:free_reflection.*', "api files('libs/android-mirror.jar')", content)
+            content = content.replace("project(':black-reflection')", "files('libs/black-reflection.jar')")
+            content = content.replace("project(':android-mirror')", "files('libs/android-mirror.jar')")
 
             # Clean up leftovers
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 33', content)
@@ -209,7 +167,7 @@ jobs:
             with open(module_gradle, 'w') as f:
                 f.write(content)
 
-        print("All modules patched as Android Libraries.")
+        print("Bcore patched successfully.")
         EOF
 
     - name: Force AndroidX and Jetifier
