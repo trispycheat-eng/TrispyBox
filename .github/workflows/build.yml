@@ -56,6 +56,7 @@ jobs:
             repositories {
                 google()
                 mavenCentral()
+                maven { url 'https://jitpack.io' }
             }
         }
         EOF
@@ -82,49 +83,26 @@ jobs:
         project(':Bcore:pine-xposed').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed')
         include ':Bcore:pine-xposed-res'
         project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
-        // REMOVED black-reflection and android-mirror because they are missing submodules
+        // NO black-reflection or android-mirror here since folders don't exist
         EOF
 
-    - name: Patch Bcore to Use Maven Reflection
+    - name: Patch ALL Modules (Replace Missing Projects)
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        # Patch Bcore to use Maven dependencies instead of local submodules
-        bcore_gradle = 'BlackBox/Bcore/build.gradle'
-        if os.path.exists(bcore_gradle):
-            with open(bcore_gradle, 'r') as f:
-                content = f.read()
-            
-            # Replace project links with Maven dependencies
-            content = content.replace("project(':black-reflection')", "'com.github.CodingGay:BlackReflection:1.0.4'")
-            content = content.replace("project(':android-mirror')", "'me.weishu:free_reflection:3.0.1'")
-            content = content.replace("rootProject.ext.blackReflection", "'1.0.4'")
-            content = content.replace("$rootProject.ext.blackReflection", "'1.0.4'")
-            
-            # Nuke any remaining broken strings
-            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api 'com.github.CodingGay:BlackReflection:1.0.4'", content)
-            content = re.sub(r'.*me\.weishu:free_reflection.*', "api 'me.weishu:free_reflection:3.0.1'", content)
-
-            # Clean up SDK versions
-            content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 33', content)
-            content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
-            content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 33', content)
-
-            with open(bcore_gradle, 'w') as f:
-                f.write(content)
-
-        # Patch all other valid modules
+        # Find EVERY build.gradle in the project
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
+        
         for module_gradle in build_files:
-            if not os.path.exists(module_gradle) or 'black-reflection' in module_gradle or 'android-mirror' in module_gradle: continue
+            if not os.path.exists(module_gradle): continue
             
             with open(module_gradle, 'r') as f:
                 content = f.read()
 
-            # Force Android Library
+            # Force Android Library for Bcore and its submodules
             content = content.replace("com.android.application", "com.android.library")
             
             # Remove applicationId
@@ -141,7 +119,16 @@ jobs:
             content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
 
-            # Clean up leftovers
+            # REPLACE ALL MISSING PROJECT LINKS WITH MAVEN
+            content = content.replace("project(':black-reflection')", "'com.github.CodingGay:BlackReflection:1.0.4'")
+            content = content.replace("project(':android-mirror')", "'me.weishu:free_reflection:3.0.1'")
+            
+            # Nuke broken strings
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api 'com.github.CodingGay:BlackReflection:1.0.4'", content)
+            content = re.sub(r'.*me\.weishu:free_reflection.*', "api 'me.weishu:free_reflection:3.0.1'", content)
+            content = content.replace('rootProject.ext.blackReflection', "'1.0.4'")
+
+            # Clean up SDK versions
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 33', content)
             content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
             content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 33', content)
