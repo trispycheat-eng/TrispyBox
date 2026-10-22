@@ -62,13 +62,6 @@ jobs:
         EOF
 
         cat << 'EOF' > settings.gradle
-        dependencyResolutionManagement {
-            repositories {
-                google()
-                mavenCentral()
-                maven { url 'https://jitpack.io' }
-            }
-        }
         rootProject.name = "TrispyBox"
         include ':app'
         include ':Bcore'
@@ -83,17 +76,15 @@ jobs:
         project(':Bcore:pine-xposed').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed')
         include ':Bcore:pine-xposed-res'
         project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
-        // NO black-reflection or android-mirror here since folders don't exist
         EOF
 
-    - name: Patch ALL Modules (Replace Missing Projects)
+    - name: Patch ALL Modules (Nuke Repositories & Fix Deps)
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        # Find EVERY build.gradle in the project
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
         
         for module_gradle in build_files:
@@ -102,16 +93,16 @@ jobs:
             with open(module_gradle, 'r') as f:
                 content = f.read()
 
-            # Force Android Library for Bcore and its submodules
+            # 1. THE FIX: Completely strip out any repositories block
+            content = re.sub(r'repositories\s*\{[\s\S]*?\}', '', content)
+
+            # 2. Force Android Library
             content = content.replace("com.android.application", "com.android.library")
             
-            # Remove applicationId
+            # 3. Remove applicationId
             content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
             
-            # Fix jcenter
-            content = content.replace('jcenter()', 'mavenCentral()')
-            
-            # Replace rootProject.ext variables
+            # 4. Replace rootProject.ext variables
             content = content.replace('rootProject.ext.compileSdkVersion', '33')
             content = content.replace('rootProject.ext.buildToolsVersion', '"33.0.0"')
             content = content.replace('rootProject.ext.minSdkVersion', '26')
@@ -119,26 +110,26 @@ jobs:
             content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
 
-            # REPLACE ALL MISSING PROJECT LINKS WITH MAVEN
-            content = content.replace("project(':black-reflection')", "'com.github.CodingGay:BlackReflection:1.0.4'")
-            content = content.replace("project(':android-mirror')", "'me.weishu:free_reflection:3.0.1'")
+            # 5. Swap dead libraries with working ones
+            content = content.replace("project(':black-reflection')", "'com.github.tiann:FreeReflection:3.1.0'")
+            content = content.replace("project(':android-mirror')", "'com.github.tiann:FreeReflection:3.1.0'")
+            content = content.replace("me.weishu:free_reflection:3.0.1", "com.github.tiann:FreeReflection:3.1.0")
             
-            # Nuke broken strings
-            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api 'com.github.CodingGay:BlackReflection:1.0.4'", content)
-            content = re.sub(r'.*me\.weishu:free_reflection.*', "api 'me.weishu:free_reflection:3.0.1'", content)
-            content = content.replace('rootProject.ext.blackReflection', "'1.0.4'")
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api 'com.github.tiann:FreeReflection:3.1.0'", content)
+            content = re.sub(r'.*me\.weishu:free_reflection.*', "api 'com.github.tiann:FreeReflection:3.1.0'", content)
+            content = content.replace('rootProject.ext.blackReflection', "'3.1.0'")
 
-            # Clean up SDK versions
+            # 6. Clean up SDK versions
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 33', content)
             content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
             content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 33', content)
             content = re.sub(r'buildToolsVersion\s+[^=\n]+', 'buildToolsVersion "33.0.0"', content)
 
-            # Fix Kotlin Plugin
+            # 7. Fix Kotlin Plugin
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-            # Add namespace
+            # 8. Add namespace
             safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
             if safe_name == "BlackBox" or safe_name == "": safe_name = "core"
 
@@ -147,7 +138,7 @@ jobs:
             elif 'namespace ' not in content:
                 content = content.replace('android {', f'android {{\n    namespace "top.niunaijun.{safe_name}"')
 
-            # Create AndroidManifest if missing
+            # 9. Create AndroidManifest if missing
             module_dir = os.path.dirname(module_gradle)
             manifest_dir = os.path.join(module_dir, 'src/main')
             manifest_path = os.path.join(manifest_dir, 'AndroidManifest.xml')
