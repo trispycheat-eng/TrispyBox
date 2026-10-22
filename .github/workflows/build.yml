@@ -49,14 +49,16 @@ jobs:
         echo "Compiling black-reflection.jar..."
         mkdir -p libs
         mkdir -p build/black-reflection
-        find BlackBox/black-reflection -name "*.java" > sources.txt
+        # ONLY compile the 'core' module
+        find BlackBox/black-reflection/core/src/main/java -name "*.java" > sources.txt
         javac -source 8 -target 8 -d build/black-reflection @sources.txt
         jar -cf libs/black-reflection.jar -C build/black-reflection .
 
         echo "Compiling android-mirror.jar..."
         mkdir -p build/android-mirror
-        find BlackBox/android-mirror -name "*.java" > sources2.txt
-        javac -source 8 -target 8 -cp libs/black-reflection.jar -d build/android-mirror @sources2.txt
+        # ONLY compile the 'library' module
+        find BlackBox/android-mirror/library/src/main/java -name "*.java" > sources2.txt
+        javac -source 8 -target 8 -cp libs/black-reflection.jar:$ANDROID_HOME/platforms/android-33/android.jar -d build/android-mirror @sources2.txt
         jar -cf libs/android-mirror.jar -C build/android-mirror .
 
     - name: Generate Root Build Files (With ext block)
