@@ -191,11 +191,10 @@ jobs:
             content = content.replace('rootProject.ext.targetSdkVersion', '33')
             content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
-            
-            # Swap dependencies
-            content = content.replace('rootProject.ext.blackReflection', "project(':black-reflection')")
-            content = content.replace("'com.github.CodingGay.BlackReflection:core:1.3.5'", "project(':black-reflection')")
-            content = content.replace("'me.weishu:free_reflection:3.0.1'", "project(':android-mirror')")
+
+            # THE FIX: Use regex to completely nuke the broken string lines
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api project(':black-reflection')", content)
+            content = re.sub(r'.*me\.weishu:free_reflection.*', "api project(':android-mirror')", content)
 
             # Clean up leftovers
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 33', content)
