@@ -87,38 +87,70 @@ jobs:
         import glob
         import re
 
-        # 1. OVERWRITE black-reflection AS PURE JAVA LIBRARY
+        # 1. OVERWRITE black-reflection AS ANDROID LIBRARY
         br_dir = 'BlackBox/black-reflection'
         if os.path.exists(br_dir):
+            os.makedirs(os.path.join(br_dir, 'src/main'), exist_ok=True)
+            with open(os.path.join(br_dir, 'src/main/AndroidManifest.xml'), 'w') as f:
+                f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
+            
             with open(os.path.join(br_dir, 'build.gradle'), 'w') as f:
                 f.write("""
         plugins {
-            id 'java-library'
+            id 'com.android.library'
         }
-        java {
-            sourceCompatibility = JavaVersion.VERSION_1_8
-            targetCompatibility = JavaVersion.VERSION_1_8
+        android {
+            namespace 'top.niunaijun.blackreflection'
+            compileSdk 34
+            defaultConfig {
+                minSdk 26
+                targetSdk 34
+            }
+            buildTypes {
+                debug { matchingFallbacks = ['debug', 'release'] }
+                release { matchingFallbacks = ['release', 'debug'] }
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
         }
                 """)
 
-        # 2. OVERWRITE android-mirror AS PURE JAVA LIBRARY
+        # 2. OVERWRITE android-mirror AS ANDROID LIBRARY
         am_dir = 'BlackBox/android-mirror'
         if os.path.exists(am_dir):
+            os.makedirs(os.path.join(am_dir, 'src/main'), exist_ok=True)
+            with open(os.path.join(am_dir, 'src/main/AndroidManifest.xml'), 'w') as f:
+                f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android" />')
+            
             with open(os.path.join(am_dir, 'build.gradle'), 'w') as f:
                 f.write("""
         plugins {
-            id 'java-library'
+            id 'com.android.library'
+        }
+        android {
+            namespace 'top.niunaijun.androidmirror'
+            compileSdk 34
+            defaultConfig {
+                minSdk 26
+                targetSdk 34
+            }
+            buildTypes {
+                debug { matchingFallbacks = ['debug', 'release'] }
+                release { matchingFallbacks = ['release', 'debug'] }
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
         }
         dependencies {
             implementation project(':black-reflection')
         }
-        java {
-            sourceCompatibility = JavaVersion.VERSION_1_8
-            targetCompatibility = JavaVersion.VERSION_1_8
-        }
                 """)
 
-        # 3. PATCH ANDROID MODULES
+        # 3. PATCH REMAINING MODULES
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
         for module_gradle in build_files:
             if not os.path.exists(module_gradle) or 'black-reflection' in module_gradle or 'android-mirror' in module_gradle: continue
@@ -144,12 +176,11 @@ jobs:
             content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
             
-            # FIX THE DEPENDENCIES (Point to local folders and remove broken Maven links)
-            content = content.replace("'com.github.CodingGay.BlackReflection:core:1.3.5'", "project(':black-reflection')")
-            content = content.replace("'me.weishu:free_reflection:3.0.1'", "project(':android-mirror')")
+            # Safely swap the reflection dependency to local project
             content = content.replace('rootProject.ext.blackReflection', "project(':black-reflection')")
             content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "implementation project(':black-reflection')", content)
-            content = re.sub(r'.*me\.weishu:free_reflection.*', "implementation project(':android-mirror')", content)
+            content = content.replace("'com.github.CodingGay.BlackReflection:core:1.3.5'", "project(':black-reflection')")
+            content = content.replace("'me.weishu:free_reflection:3.0.1'", "project(':android-mirror')")
 
             # Clean up leftovers
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 34', content)
@@ -162,14 +193,17 @@ jobs:
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
 
-            # Add namespace
+            # Add namespace and matchingFallbacks
             safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
             if safe_name == "BlackBox" or safe_name == "": safe_name = "core"
 
             if 'android {' not in content:
-                content += f"\nandroid {{\n    namespace 'top.niunaijun.{safe_name}'\n    compileSdk 34\n    defaultConfig {{\n        minSdk 26\n        targetSdk 34\n    }}\n    compileOptions {{\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n    }}\n}}\n"
+                content += f"\nandroid {{\n    namespace 'top.niunaijun.{safe_name}'\n    compileSdk 34\n    defaultConfig {{\n        minSdk 26\n        targetSdk 34\n    }}\n    buildTypes {{\n        debug {{ matchingFallbacks = ['debug', 'release'] }}\n        release {{ matchingFallbacks = ['release', 'debug'] }}\n    }}\n    compileOptions {{\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n    }}\n}}\n"
             elif 'namespace ' not in content:
                 content = content.replace('android {', f'android {{\n    namespace "top.niunaijun.{safe_name}"')
+
+            if 'matchingFallbacks' not in content and 'buildTypes {' in content:
+                content = content.replace('buildTypes {', "buildTypes {\n        debug { matchingFallbacks = ['debug', 'release'] }\n        release { matchingFallbacks = ['release', 'debug'] }")
 
             # Create AndroidManifest if missing
             module_dir = os.path.dirname(module_gradle)
