@@ -65,6 +65,7 @@ jobs:
             repositories {
                 google()
                 mavenCentral()
+                maven { url 'https://jitpack.io' }
             }
         }
         rootProject.name = "TrispyBox"
@@ -81,31 +82,41 @@ jobs:
         project(':Bcore:pine-xposed').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed')
         include ':Bcore:pine-xposed-res'
         project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
+        // REMOVED black-reflection and android-mirror because they are missing submodules
         EOF
 
-    - name: Compile Reflection JARs Manually
-      run: |
-        echo "Compiling black-reflection..."
-        mkdir -p BlackBox/Bcore/libs
-        mkdir -p build/black-reflection
-        find BlackBox/black-reflection/src/main/java -name "*.java" > sources.txt
-        javac -source 8 -target 8 -d build/black-reflection @sources.txt
-        jar -cf BlackBox/Bcore/libs/black-reflection.jar -C build/black-reflection .
-
-        echo "Compiling android-mirror..."
-        mkdir -p build/android-mirror
-        find BlackBox/android-mirror/src/main/java -name "*.java" > sources2.txt
-        javac -source 8 -target 8 -cp BlackBox/Bcore/libs/black-reflection.jar -d build/android-mirror @sources2.txt
-        jar -cf BlackBox/Bcore/libs/android-mirror.jar -C build/android-mirror .
-
-    - name: Patch Bcore Gradle
+    - name: Patch Bcore to Use Maven Reflection
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        # PATCH REMAINING ANDROID MODULES
+        # Patch Bcore to use Maven dependencies instead of local submodules
+        bcore_gradle = 'BlackBox/Bcore/build.gradle'
+        if os.path.exists(bcore_gradle):
+            with open(bcore_gradle, 'r') as f:
+                content = f.read()
+            
+            # Replace project links with Maven dependencies
+            content = content.replace("project(':black-reflection')", "'com.github.CodingGay:BlackReflection:1.0.4'")
+            content = content.replace("project(':android-mirror')", "'me.weishu:free_reflection:3.0.1'")
+            content = content.replace("rootProject.ext.blackReflection", "'1.0.4'")
+            content = content.replace("$rootProject.ext.blackReflection", "'1.0.4'")
+            
+            # Nuke any remaining broken strings
+            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api 'com.github.CodingGay:BlackReflection:1.0.4'", content)
+            content = re.sub(r'.*me\.weishu:free_reflection.*', "api 'me.weishu:free_reflection:3.0.1'", content)
+
+            # Clean up SDK versions
+            content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 33', content)
+            content = re.sub(r'minSdkVersion\s+[^=\n]+', 'minSdkVersion 26', content)
+            content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 33', content)
+
+            with open(bcore_gradle, 'w') as f:
+                f.write(content)
+
+        # Patch all other valid modules
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
         for module_gradle in build_files:
             if not os.path.exists(module_gradle) or 'black-reflection' in module_gradle or 'android-mirror' in module_gradle: continue
@@ -129,12 +140,6 @@ jobs:
             content = content.replace('rootProject.ext.targetSdkVersion', '33')
             content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
-
-            # Load the JARs we just compiled
-            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api files('libs/black-reflection.jar')", content)
-            content = re.sub(r'.*me\.weishu:free_reflection.*', "api files('libs/android-mirror.jar')", content)
-            content = content.replace("project(':black-reflection')", "files('libs/black-reflection.jar')")
-            content = content.replace("project(':android-mirror')", "files('libs/android-mirror.jar')")
 
             # Clean up leftovers
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 33', content)
@@ -167,7 +172,7 @@ jobs:
             with open(module_gradle, 'w') as f:
                 f.write(content)
 
-        print("Bcore patched successfully.")
+        print("Patched successfully.")
         EOF
 
     - name: Force AndroidX and Jetifier
