@@ -78,14 +78,13 @@ jobs:
         project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
         EOF
 
-    - name: Patch ALL Modules (Restore AIDL Compatibility)
+    - name: Patch ALL Modules (Fix Dependencies & Repositories)
       run: |
         python3 - << 'EOF'
         import os
         import glob
         import re
 
-        # Find all build.gradle files in BlackBox
         build_files = glob.glob('BlackBox/**/build.gradle', recursive=True)
         
         for module_gradle in build_files:
@@ -97,7 +96,7 @@ jobs:
             # 1. Completely strip out any repositories block (fixes the repository warning)
             content = re.sub(r'repositories\s*\{[\s\S]*?\}', '', content)
 
-            # 2. Force Android Library (since app module is the only true application)
+            # 2. Force Android Library
             content = content.replace("com.android.application", "com.android.library")
             
             # 3. Remove applicationId
@@ -111,13 +110,10 @@ jobs:
             content = content.replace('rootProject.ext.ndkVersion', '"25.1.8937393"')
             content = content.replace('rootProject.ext.androidXCoreVersion', '"1.9.0"')
 
-            # 5. Swap missing local modules for JitPack Maven libraries
-            content = content.replace("project(':black-reflection')", "'com.github.tiann:FreeReflection:3.1.0'")
+            # 5. Swap missing local projects for JitPack Maven libraries
+            content = content.replace("project(':black-reflection')", "'com.github.CodingGay.BlackReflection:core:1.3.1'")
             content = content.replace("project(':android-mirror')", "'com.github.tiann:FreeReflection:3.1.0'")
             content = content.replace("me.weishu:free_reflection:3.0.1", "com.github.tiann:FreeReflection:3.1.0")
-            
-            content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', "api 'com.github.tiann:FreeReflection:3.1.0'", content)
-            content = re.sub(r'.*me\.weishu:free_reflection.*', "api 'com.github.tiann:FreeReflection:3.1.0'", content)
 
             # 6. Clean up SDK versions
             content = re.sub(r'compileSdkVersion\s+[^=\n]+', 'compileSdkVersion 33', content)
@@ -125,34 +121,14 @@ jobs:
             content = re.sub(r'targetSdkVersion\s+[^=\n]+', 'targetSdkVersion 33', content)
             content = re.sub(r'buildToolsVersion\s+[^=\n]+', 'buildToolsVersion "33.0.0"', content)
 
-            # 7. Remove namespace (AGP 7 uses package in manifest for AIDL)
-            content = re.sub(r'namespace\s+[\'"][^\'"]+[\'"]', '', content)
-            content = re.sub(r'namespace\s*=\s*[\'"][^\'"]+[\'"]', '', content)
-
-            # 8. Fix Kotlin Plugin syntax
+            # 7. Fix Kotlin Plugin
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
-
-            # 9. Add android block if missing
-            safe_name = os.path.basename(os.path.dirname(module_gradle)).replace('-', '_')
-            if safe_name == "BlackBox" or safe_name == "": safe_name = "core"
-
-            if 'android {' not in content:
-                content += f"\nandroid {{\n    compileSdk 33\n    defaultConfig {{\n        minSdk 26\n        targetSdk 33\n    }}\n    compileOptions {{\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n    }}\n}}\n"
-
-            # 10. Create AndroidManifest WITH PACKAGE (Required for AIDL)
-            module_dir = os.path.dirname(module_gradle)
-            manifest_dir = os.path.join(module_dir, 'src/main')
-            manifest_path = os.path.join(manifest_dir, 'AndroidManifest.xml')
-            os.makedirs(manifest_dir, exist_ok=True)
-            
-            with open(manifest_path, 'w') as f:
-                f.write(f'<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="top.niunaijun.{safe_name}" />')
 
             with open(module_gradle, 'w') as f:
                 f.write(content)
 
-        print("Patched successfully. Restored AIDL package.")
+        print("Patched successfully. Left AndroidManifests untouched.")
         EOF
 
     - name: Force AndroidX and Jetifier
