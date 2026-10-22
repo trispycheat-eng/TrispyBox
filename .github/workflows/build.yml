@@ -39,29 +39,7 @@ jobs:
         fi
         rm -rf BlackBox_tmp
 
-    - name: Download and Compile Missing Reflection JARs
-      run: |
-        echo "Cloning reflection sources..."
-        rm -rf BlackBox/black-reflection BlackBox/android-mirror
-        git clone --depth 1 https://github.com/CodingGay/BlackReflection.git BlackBox/black-reflection
-        git clone --depth 1 https://github.com/tiann/FreeReflection.git BlackBox/android-mirror
-
-        echo "Compiling black-reflection.jar..."
-        mkdir -p libs
-        mkdir -p build/black-reflection
-        # ONLY compile the 'core' module
-        find BlackBox/black-reflection/core/src/main/java -name "*.java" > sources.txt
-        javac -source 8 -target 8 -d build/black-reflection @sources.txt
-        jar -cf libs/black-reflection.jar -C build/black-reflection .
-
-        echo "Compiling android-mirror.jar..."
-        mkdir -p build/android-mirror
-        # ONLY compile the 'library' module
-        find BlackBox/android-mirror/library/src/main/java -name "*.java" > sources2.txt
-        javac -source 8 -target 8 -cp libs/black-reflection.jar:$ANDROID_HOME/platforms/android-33/android.jar -d build/android-mirror @sources2.txt
-        jar -cf libs/android-mirror.jar -C build/android-mirror .
-
-    - name: Generate Root Build Files (With ext block)
+    - name: Generate Root Build Files (With ext block and JitPack)
       run: |
         cat << 'EOF' > build.gradle
         buildscript {
@@ -78,10 +56,11 @@ jobs:
             repositories {
                 google()
                 mavenCentral()
+                maven { url 'https://jitpack.io' }
             }
         }
         ext {
-            blackReflection = "com.github.CodingGay.BlackReflection:core:1.3.1"
+            blackReflection = "1.3.1"
             androidXCoreVersion = "1.9.0"
             compileSdkVersion = 33
             buildToolsVersion = "33.0.0"
@@ -108,7 +87,7 @@ jobs:
         project(':Bcore:pine-xposed-res').projectDir = new File(settingsDir, 'BlackBox/Bcore/pine-xposed-res')
         EOF
 
-    - name: Patch ALL Modules (Use Local JARs)
+    - name: Patch ALL Modules (Fix Dependencies via Maven)
       run: |
         python3 - << 'EOF'
         import os
@@ -132,17 +111,15 @@ jobs:
             # 3. Remove applicationId
             content = re.sub(r'applicationId\s*["\'][^"\']+["\']', '', content)
 
-            # 4. Replace missing projects with our local compiled JARs
-            jar_br = 'api files("${rootDir}/libs/black-reflection.jar")'
-            jar_am = 'api files("${rootDir}/libs/android-mirror.jar")'
+            # 4. The exact Maven coordinates that work on JitPack
+            jar_br = "api 'com.github.CodingGay:BlackReflection:1.3.1'"
+            jar_am = "api 'com.github.tiann:FreeReflection:3.1.0'"
             
             content = re.sub(r'.*com\.github\.CodingGay\.BlackReflection.*', jar_br, content)
             content = re.sub(r'.*me\.weishu:free_reflection.*', jar_am, content)
             content = content.replace("project(':black-reflection')", jar_br)
             content = content.replace("project(':android-mirror')", jar_am)
             
-            content = content.replace('rootProject.ext.blackReflection', "'com.github.CodingGay.BlackReflection:core:1.3.1'")
-
             # 5. Fix Kotlin Plugin
             content = content.replace("id 'kotlin-android'", "id 'org.jetbrains.kotlin.android'")
             content = content.replace("apply plugin: 'kotlin-android'", "apply plugin: 'org.jetbrains.kotlin.android'")
@@ -150,7 +127,7 @@ jobs:
             with open(module_gradle, 'w') as f:
                 f.write(content)
 
-        print("Patched successfully. Using local JARs.")
+        print("Patched successfully. Using JitPack dependencies.")
         EOF
 
     - name: Force AndroidX and Jetifier
