@@ -3,7 +3,6 @@ plugins {
 }
 
 android {
-    namespace 'com.android.system.service'
     compileSdk 33
 
     defaultConfig {
@@ -34,7 +33,6 @@ android {
 }
 
 dependencies {
-    // Only link the engine
     implementation project(':Bcore')
     implementation 'androidx.appcompat:appcompat:1.6.1'
 }
